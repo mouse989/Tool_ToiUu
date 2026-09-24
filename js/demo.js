@@ -27,6 +27,9 @@
         const cls = [rowCls(r), colCls(c)].sort().join('');
         const width = cls.includes('A') ? 24 : cls.includes('C') ? 18 : 12;
         const node = { id: id(r, c), name: rowName(r) + ' × ' + colName(c), lat: U.round(lat, 6), lon: U.round(lon, 6), signalized: true, control: 'fixed', width, plans: {}, opt: {} };
+        const dc = Math.hypot(r - (o.rows - 1) / 2, c - (o.cols - 1) / 2) / Math.hypot(o.rows / 2, o.cols / 2);
+        const u = rnd();
+        node.landuse = dc < 0.35 ? (u < 0.25 ? 'thuong_mai' : u < 0.55 ? 'van_phong' : 'thuong') : dc > 0.6 ? (u < 0.45 ? 'dan_cu' : 'thuong') : (u < 0.15 ? 'truong_hoc' : u < 0.35 ? 'dan_cu' : 'thuong');
         const nPh = cls === 'AA' && rnd() < 0.25 ? 3 : 2;
         const baseC = cls === 'AA' ? rnd.pick([100, 110, 120]) : cls.includes('A') ? rnd.pick([80, 90, 100]) : cls.includes('C') ? rnd.pick([70, 80, 90]) : rnd.pick([60, 60, 70]);
         for (const b of bandIds) {

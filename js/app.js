@@ -13,7 +13,7 @@
     sel: null, chain: [], tool: 'sel', pendingLinkFrom: null,
     colorBy: 'vc', tsd: null, dock: 'tsd', dockMin: false,
     sim: null, simGeo: null, playing: false, simSpeed: 20, simScenario: 'opt-rec', rec: null,
-    ab: null, seriesMetric: 'veh', optRunning: false, zoneColor: null, hover: null,
+    ab: null, seriesMetric: 'bal', optRunning: false, zoneColor: null, hover: null,
   };
 
   /* ── tiện ích giao diện ── */
@@ -533,6 +533,7 @@
         <div class="grid2"><label class="field">Mã nút<input data-nf="id" value="${esc(node.id)}"></label><label class="field">Bề rộng nút (m)<input type="number" data-nf="width" value="${node.width}"></label></div>
         <label class="field">Tên nút<input data-nf="name" value="${esc(node.name)}"></label>
         <div class="grid2"><label class="field">Điều khiển<select data-nf="control">${Object.entries(SIM.MODES).map(([k, v]) => `<option value="${k}" ${node.control === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+        <label class="field">Khu vực xung quanh<select data-nf="landuse" title="Quyết định tỷ lệ xe kết thúc/bắt đầu chuyến tại khu vực nút">${Object.entries(M.LANDUSE).map(([k, v]) => `<option value="${k}" ${node.landuse === k ? 'selected' : ''}>${v.label} (${Math.round((v.r ?? S.project.params.exchangeRate) * 100)}%)</option>`).join('')}</select></label>
         <label class="field">Có đèn<select data-nf="signalized"><option value="1" ${node.signalized ? 'selected' : ''}>Có</option><option value="0" ${!node.signalized ? 'selected' : ''}>Không</option></select></label></div>
         <h3>Giản đồ pha hiện trạng · ${esc(bandLabel(S.band))}</h3>${planEditor(node, 'base')}
         <div class="row"><button class="btn sm" data-act="webster">Webster cho nút</button><button class="btn sm" data-act="ite">Vàng/đỏ theo ITE</button><button class="btn sm" data-act="copyband">Chép sang mọi khung giờ</button></div>
@@ -571,6 +572,7 @@
         <div class="tile"><small>Trễ TB</small><b>${z.opt ? z.opt.delay.toFixed(1) : '—'}</b><small>hiện trạng ${z.base ? z.base.delay.toFixed(1) : '—'}</small></div>
         <div class="tile"><small>Số lần dừng</small><b>${z.opt ? z.opt.stops.toFixed(2) : '—'}</b><small>hiện trạng ${z.base ? z.base.stops.toFixed(2) : '—'}</small></div></div>
         <h3>Phương án</h3><p>${esc((r.recs.find(x => x.kind === 'zone' && x.zone === z.id) || {}).text || '')}</p>
+        ${S.sim ? zoneBalanceHtml(z) : '<p class="note">Chạy mô phỏng (thẻ Mô phỏng) để xem cân bằng xe vào/ra của vùng.</p>'}
         ${z.adaptiveGain !== undefined ? `<p class="note">Kiểm chứng CTM: trễ vùng cố định ${z.ctmFixedDelayH.toFixed(1)} xe·h → thích ứng ${z.ctmAdaptDelayH.toFixed(1)} xe·h.</p>` : ''}
         <h3>Hành lang trong vùng</h3>${corr.length ? corr.map(c => `<div class="rec ${c.gws.cls}" data-corr="${r.corridors.indexOf(c)}"><div class="t">${esc(c.road || '(không tên)')} <span class="badge">${c.ids.length} nút</span><span class="badge">GWS ${c.gws.gws.toFixed(0)}</span></div>dải ${c.after.bOut.toFixed(0)}s / ${c.after.bIn.toFixed(0)}s</div>`).join('') : '<p class="note">Không có hành lang đủ điều kiện.</p>'}
         <h3>Nút</h3><p class="mono" style="font-size:11.5px">${z.ids.map(esc).join(', ')}</p>`;
@@ -578,6 +580,23 @@
     }
   }
 
+  function zoneBalanceHtml(z) {
+    const net = getNet();
+    const set = new Set(z.ids.map(id => net.nodeIdx.get(id)).filter(x => x !== undefined));
+    const b = S.sim.zoneBalance(set);
+    const h = b.span / 3600;
+    const vin = b.inB + b.src, vout = b.outB + b.sink;
+    const r = (x) => U.fmt(x / h);
+    return `<h3>Cân bằng xe của vùng (CTM, ${(b.span / 60).toFixed(0)} phút)</h3>
+      <table class="cmp"><thead><tr><th></th><th>pcu</th><th>pcu/h</th></tr></thead><tbody>
+      <tr><td>Vào qua biên vùng</td><td>${U.fmt(b.inB)}</td><td>${r(b.inB)}</td></tr>
+      <tr><td>Phát sinh trong vùng (nhà, cơ quan, bãi đỗ, hẻm)</td><td>${U.fmt(b.src)}</td><td>${r(b.src)}</td></tr>
+      <tr><td>Ra qua biên vùng</td><td>${U.fmt(b.outB)}</td><td>${r(b.outB)}</td></tr>
+      <tr><td>Kết thúc chuyến trong vùng</td><td>${U.fmt(b.sink)}</td><td>${r(b.sink)}</td></tr>
+      <tr><td><b>Tích luỹ (vào − ra)</b></td><td><b>${U.fmt(vin - vout)}</b></td><td></td></tr>
+      <tr><td>Đang có trong vùng</td><td>${U.fmt(b.inside)}</td><td></td></tr></tbody></table>
+      <p class="note">Tích luỹ tăng mãi nghĩa là vùng không thoát kịp (quá bão hoà / tràn ngược). Giai đoạn đầu mô phỏng mạng đang được lấp đầy nên luôn tích luỹ.</p>`;
+  }
   function bindInspectorNode(node, n) {
     const el = $('insp');
     const P = S.project.params;
@@ -695,6 +714,7 @@
         ${pf('lostStart', 'Mất mát khởi động l₁ (s)')}${pf('greenExt', 'Tận dụng vàng e (s)')}
         ${pf('alpha', 'Phân tán Robertson α')}${pf('beta', 'Phân tán Robertson β')}
         ${pf('spillThreshold', 'Ngưỡng tràn ngược')}${pf('vDefault', 'v mặc định (km/h)')}
+        ${pf('exchangeRate', 'Tỷ lệ xe ra/vào hẻm, công trình')}${pf('fifo', 'Mức FIFO nhánh ≥ 2 làn (0–1)')}
       </div>
       <label class="field" style="margin-top:6px">Nền bản đồ (URL ô XYZ)<select id="tileSel">
         <option value="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png">CARTO Voyager (mặc định)</option>
@@ -978,11 +998,13 @@
     else if (S.sim && S.sim.series.length) sets.push({ label: 'Mô phỏng hiện tại', color: css('--s1'), s: S.sim.series });
     if (!sets.length) { empty.hidden = false; empty.textContent = 'Chạy mô phỏng hoặc đối sánh A/B ở tab Mô phỏng để xem diễn biến.'; cv.hidden = true; lg.innerHTML = ''; return; }
     empty.hidden = true; cv.hidden = false;
-    const MET = { veh: ['Xe trong mạng (pcu)', x => x.veh + x.buf, v => U.fmt(v)], speed: ['Vận tốc TB (km/h)', x => x.speed, v => (+v).toFixed(1)], thr: ['Thông lượng ra (pcu/h)', x => x.thr, v => U.fmt(v)], spill: ['Nhánh đang tràn ngược', x => x.spill, v => U.fmt(v)] };
+    const MET = { bal: ['Cân bằng xe vào / ra mạng (pcu/h)', null, v => U.fmt(v)], veh: ['Xe trong mạng + chờ vào (pcu)', x => x.veh + x.buf, v => U.fmt(v)], speed: ['Vận tốc TB (km/h)', x => x.speed, v => (+v).toFixed(1)], thr: ['Thông lượng ra (pcu/h)', x => x.thr, v => U.fmt(v)], spill: ['Nhánh đang tràn ngược', x => x.spill, v => U.fmt(v)] };
     const m = MET[S.seriesMetric];
-    const series = sets.map(st => ({ label: st.label, color: st.color, points: st.s.map(x => [x.t / 60, m[1](x)]) }));
-    const geo = CH().line(cv, { series, xLabel: 'Thời gian mô phỏng (phút)', yLabel: m[0], xFmt: v => Math.round(v), yFmt: m[2], y0: 0 });
-    lg.innerHTML = `<span style="pointer-events:auto"><select class="sel" id="serMetric">${Object.entries(MET).map(([k, v]) => `<option value="${k}" ${k === S.seriesMetric ? 'selected' : ''}>${v[0]}</option>`).join('')}</select></span>` + sets.map(st => `<span><span class="swatch" style="background:${st.color}"></span>${esc(st.label)}</span>`).join('');
+    const series = S.seriesMetric === 'bal'
+      ? sets.flatMap(st => [{ label: st.label + ' · vào', color: st.color, points: st.s.map(x => [x.t / 60, x.inr || 0]) }, { label: st.label + ' · ra', color: st.color, dash: [6, 4], points: st.s.map(x => [x.t / 60, x.thr]) }])
+      : sets.map(st => ({ label: st.label, color: st.color, points: st.s.map(x => [x.t / 60, m[1](x)]) }));
+    const geo = CH().line(cv, { series, xLabel: 'Thời gian mô phỏng (phút)', yLabel: '', xFmt: v => Math.round(v), yFmt: m[2], y0: 0 });
+    lg.innerHTML = `<span style="pointer-events:auto"><select class="sel" id="serMetric">${Object.entries(MET).map(([k, v]) => `<option value="${k}" ${k === S.seriesMetric ? 'selected' : ''}>${v[0]}</option>`).join('')}</select></span>` + sets.map(st => `<span><span class="swatch" style="background:${st.color}"></span>${esc(st.label)}</span>`).join('') + (S.seriesMetric === 'bal' ? '<span>nét liền = vào (phát sinh), nét đứt = ra (kết thúc chuyến + ra biên)</span>' : '');
     lg.style.pointerEvents = 'auto';
     $('serMetric').onchange = (e) => { S.seriesMetric = e.target.value; drawDock(); };
     seriesState = { geo, series, xFmt: v => (+v).toFixed(0) + ' phút', yFmt: m[2] };
@@ -998,7 +1020,7 @@
     mp: 'Max Pressure không chu kỳ toàn mạng',
     act: 'Xe kích hoạt toàn mạng',
   };
-  const simCfg = { dt: 2, warmup: 600, duration: 1800, demandMul: 1, noiseCV: 0 };
+  const simCfg = { dt: 2, warmup: 600, duration: 1800, demandMul: 1, noiseCV: 0, profile: 'flat' };
 
   function simConfigFor(key) {
     const net = getNet();
@@ -1028,6 +1050,7 @@
         <label class="field">Khởi động (phút)<input type="number" id="sWarm" value="${simCfg.warmup / 60}"></label>
         <label class="field">Thời lượng đo (phút)<input type="number" id="sDur" value="${simCfg.duration / 60}"></label>
         <label class="field">Hệ số nhu cầu ×<input type="number" step="0.05" id="sMul" value="${simCfg.demandMul}"></label>
+        <label class="field" style="grid-column:1/3">Hồ sơ nhu cầu theo thời gian<select id="sProf"><option value="flat" ${simCfg.profile === 'flat' ? 'selected' : ''}>Cố định = lưu lượng khung giờ (giờ cao điểm kéo dài)</option><option value="peak" ${simCfg.profile === 'peak' ? 'selected' : ''}>Dạng đỉnh: 70% → 100% → 70% (tăng – đỉnh – giảm)</option></select></label>
         <label class="field">Dao động nhu cầu CV<input type="number" step="0.05" id="sCV" value="${simCfg.noiseCV}" title="Nhiễu ngẫu nhiên lưu lượng vào mạng mỗi 5 phút (0 = ổn định)"></label>
         <label class="field">Tốc độ phát<select id="sSpd">${[1, 5, 10, 20, 40, 80].map(x => `<option value="${x}" ${x === S.simSpeed ? 'selected' : ''}>×${x}</option>`).join('')}</select></label>
       </div>
@@ -1045,6 +1068,7 @@
     $('sWarm').onchange = (e) => { simCfg.warmup = U.num(e.target.value, 10) * 60; };
     $('sDur').onchange = (e) => { simCfg.duration = U.num(e.target.value, 30) * 60; };
     $('sMul').onchange = (e) => { simCfg.demandMul = U.num(e.target.value, 1); };
+    $('sProf').onchange = (e) => { simCfg.profile = e.target.value; };
     $('sCV').onchange = (e) => { simCfg.noiseCV = U.num(e.target.value, 0); };
     $('sSpd').onchange = (e) => { S.simSpeed = +e.target.value; };
     $('sPlay').onclick = () => { if (!S.sim) startSim(); else { S.playing = !S.playing; if (S.playing) loop(); renderSimButtons(); } };
@@ -1062,7 +1086,8 @@
     let cfg;
     try { cfg = simConfigFor(S.simScenario); } catch (e) { toast(e.message, true); return; }
     const net = getNet();
-    cfg.warmup = 0; // hoạt ảnh: đo ngay từ đầu, mạng bắt đầu trống
+    cfg.total = cfg.warmup + cfg.duration; // cho hồ sơ nhu cầu dạng đỉnh
+    cfg.warmup = 0; // hoạt ảnh: đo ngay từ đầu, mạng bắt đầu trống (khoảng 15–20 phút đầu là giai đoạn "lấp đầy")
     S.sim = SIM.create(net, cfg);
     S.ab = null;
     attachRecorder();
@@ -1094,8 +1119,13 @@
     const t0 = performance.now();
     while (S.sim.t < target && performance.now() - t0 < 28) S.sim.step();
     view.redraw();
-    if (now - lastDockDraw > 400) { lastDockDraw = now; updateSimKpi(); if (S.dock !== 'curve') drawDock(); }
+    if (now - lastDockDraw > 400) { lastDockDraw = now; updateSimKpi(); if (S.sel && S.sel.type === 'zone') renderInspector(); if (S.dock !== 'curve') drawDock(); }
     requestAnimationFrame(loop);
+  }
+  function balTag(x) {
+    if (!x.inr) return '';
+    const d = (x.inr - x.thr) / x.inr;
+    return Math.abs(d) < 0.05 ? '<span class="badge ok">cân bằng</span>' : d > 0 ? `<span class="badge bad">tích luỹ ${(d * 100).toFixed(0)}%</span>` : '<span class="badge info">đang thoát</span>';
   }
   function updateSimKpi() {
     const hud = $('hud'), box = $('simKpi');
@@ -1104,7 +1134,7 @@
     const t = s.t, hh = Math.floor(t / 3600), mm = Math.floor(t % 3600 / 60), ss = Math.floor(t % 60);
     const clock = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
     let spill = 0; for (let i = 0; i < s.spillNow.length; i++) spill += s.spillNow[i];
-    hud.innerHTML = `<div style="color:var(--muted);font-size:11px">${esc(SCN[S.simScenario])}</div><b>${clock}</b> <span class="note">×${S.simSpeed}</span><br>${U.fmt(last.veh + last.buf)} pcu trong mạng · ${last.speed.toFixed(1)} km/h<br>${spill} nhánh tràn ngược`;
+    hud.innerHTML = `<div style="color:var(--muted);font-size:11px">${esc(SCN[S.simScenario])}</div><b>${clock}</b> <span class="note">×${S.simSpeed}</span><br>${U.fmt(last.veh)} pcu trong mạng${last.buf > 1 ? ' + ' + U.fmt(last.buf) + ' chờ vào' : ''} · ${last.speed.toFixed(1)} km/h<br>vào ${U.fmt(last.inr || 0)} · ra ${U.fmt(last.thr)} pcu/h ${balTag(last)}<br>${spill} nhánh tràn ngược`;
     if (box) box.innerHTML = `<div class="tiles" style="margin-top:8px"><div class="tile"><small>Thời gian</small><b class="mono" style="font-size:15px">${clock}</b></div><div class="tile"><small>Vận tốc TB</small><b>${last.speed.toFixed(1)}</b><small>km/h (phút gần nhất)</small></div><div class="tile"><small>Tràn ngược</small><b>${spill}</b><small>nhánh</small></div></div>`;
   }
 
@@ -1148,6 +1178,9 @@
       ${row('Thông lượng ra (pcu/h)', A.throughput, B.throughput, 0, 'hi')}
       ${row('Tràn ngược (nhánh·phút)', A.spillLinkMin, B.spillLinkMin, 0, 'lo')}
       ${row('Chờ vào mạng (xe·h)', A.bufWaitH, B.bufWaitH, 1, 'lo')}
+      ${row('Xe vào mạng (pcu)', A.entries, B.entries, 0, 'hi')}
+      ${row('Xe ra mạng (pcu)', A.exits, B.exits, 0, 'hi')}
+      ${row('Tích luỹ trong mạng (pcu)', A.accum, B.accum, 0, 'lo')}
       </tbody></table><p class="note">A: ${esc(ab.aLabel)} · B: ${esc(ab.bLabel)}. Đo ${(A.span / 60).toFixed(0)} phút sau khởi động.</p>`;
   }
 
@@ -1258,7 +1291,7 @@
     if (act === 'x-nodes') U.download('nut_giao.csv', IO.nodesCSV(p));
     if (act === 'x-plans') U.download('gian_do_pha.csv', IO.plansCSV(p, ['hien_trang', 'toi_uu']));
     if (act === 'x-links') U.download('nhanh_luu_luong.csv', IO.linksCSV(p));
-    if (act === 'tpl-nodes') U.download('mau_nut_giao.csv', U.toCSV(['ma_nut', 'ten_nut', 'lat', 'lon', 'be_rong_m', 'co_den', 'dieu_khien'], [['2013-1', 'Võ Thị Sáu × Nam Kỳ Khởi Nghĩa', 10.78502, 106.68912, 22, 1, 'fixed']]));
+    if (act === 'tpl-nodes') U.download('mau_nut_giao.csv', U.toCSV(['ma_nut', 'ten_nut', 'lat', 'lon', 'be_rong_m', 'co_den', 'dieu_khien', 'su_dung_dat'], [['2013-1', 'Võ Thị Sáu × Nam Kỳ Khởi Nghĩa', 10.78502, 106.68912, 22, 1, 'fixed', 'van_phong']]));
     if (act === 'tpl-plans') U.download('mau_gian_do_pha.csv', U.toCSV(['ma_nut', 'khung_gio', 'phuong_an', 'chu_ky', 'offset', 'xanh_1', 'vang_1', 'do_1', 'xanh_2', 'vang_2', 'do_2', 'xanh_3', 'vang_3', 'do_3'], p.bands.map(b => ['2013-1', b.id, 'hien_trang', 80, 0, 35, 3, 2, 35, 3, 2, '', '', ''])));
     if (act === 'tpl-links') U.download('mau_nhanh_luu_luong.csv', U.toCSV(['tu_nut', 'den_nut', 'ten_duong', 'chieu_dai_m', 'so_lan', 's_pcu_h', 'pha', ...p.bands.flatMap(b => ['q_' + b.id, 'v_' + b.id])], [['3012-1', '2013-1', 'Nam Kỳ Khởi Nghĩa', 520, 3, '', 1, ...p.bands.flatMap(() => [1500, 28])]]));
     if (act === 'tpl-appr') U.download('mau_huong_tiep_can.csv', IO.approachCSVTemplate(p));
@@ -1354,7 +1387,7 @@
     S.scenario = S.project.nodes.some(n => n.opt && n.opt[S.band]) && S.project.results && S.project.results[S.band] ? 'opt' : 'base';
     setScenarioButtons();
     // OSM chặn ô bản đồ khi mở file:// (không có Referer) → tự chuyển sang CARTO
-    if (/tile\.openstreetmap\.org/.test(S.project.params.tileUrl) && location.protocol === 'file:') S.project.params.tileUrl = M.DEFAULT_PARAMS.tileUrl;
+    if (/tile\.openstreetmap\.org/.test(S.project.params.tileUrl) && window.location.protocol === 'file:') S.project.params.tileUrl = M.DEFAULT_PARAMS.tileUrl;
     setTiles(S.project.params.tileUrl);
     invalidate(true); fillBands(); updateChainInfo(); setTool('sel');
     if (fit) fitAll();

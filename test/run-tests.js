@@ -109,6 +109,18 @@ test('CTM: bảo toàn xe (vào = ra + trong mạng)', () => {
   near(r.entries, sim.K.exits + inside, 1e-6 * r.entries + 1e-6, 'bảo toàn');
 });
 
+test('CTM: cân bằng vào/ra và lưu lượng vạch dừng khớp số đo khi chưa bão hoà', () => {
+  const p = D.generate({ rows: 5, cols: 6, seed: 12 });
+  for (const l of p.links) l.data.am.q = Math.round(l.data.am.q * 0.6);
+  for (const n of p.nodes) { const r = SG.optimizeNode(M.buildNet(p, 'am'), p.nodes.indexOf(n), n.plans.am); n.plans.am = r.plan; }
+  const net = M.buildNet(p, 'am');
+  const { res, sim } = SIM.runBatch(net, { scenario: 'base', dt: 1, warmup: 1200, duration: 1800 });
+  near(res.exits / res.entries, 1, 0.03, 'vào ≈ ra');
+  let err = 0, tot = 0;
+  net.links.forEach((l, i) => { err += Math.abs(sim.K.out[i] / 1800 * 3600 - l.q); tot += l.q; });
+  assert.ok(err / tot < 0.1, 'sai lệch lưu lượng vạch dừng ' + (err / tot));
+});
+
 test('CTM: nhánh hạ lưu đầy chặn xả (tràn ngược)', () => {
   const p = corridorProject(3, 200, 1500, 60, 25);
   // nút cuối đỏ gần như toàn bộ cho trục → hàng chờ lan ngược

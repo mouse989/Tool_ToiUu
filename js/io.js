@@ -81,8 +81,8 @@
 
   /* ── CSV: xuất ── */
   IO.nodesCSV = function (p) {
-    return U.toCSV(['ma_nut', 'ten_nut', 'lat', 'lon', 'be_rong_m', 'co_den', 'dieu_khien'],
-      p.nodes.map(n => [n.id, n.name, n.lat, n.lon, n.width, n.signalized ? 1 : 0, n.control]));
+    return U.toCSV(['ma_nut', 'ten_nut', 'lat', 'lon', 'be_rong_m', 'co_den', 'dieu_khien', 'su_dung_dat'],
+      p.nodes.map(n => [n.id, n.name, n.lat, n.lon, n.width, n.signalized ? 1 : 0, n.control, n.landuse || 'thuong']));
   };
 
   IO.plansCSV = function (p, which) {
@@ -165,6 +165,8 @@
       if (cd !== undefined) n.signalized = !['0', 'khong', 'false', 'no'].includes(U.normKey(cd));
       const dk = pick(r, 'dieu_khien', 'control');
       if (dk) n.control = ['fixed', 'actuated', 'mp', 'cmp'].includes(dk) ? dk : n.control;
+      const lu = U.normKey(pick(r, 'su_dung_dat', 'landuse') || '');
+      if (lu && TS.model.LANDUSE[lu]) n.landuse = lu;
     }
     M.normalizeProject(p);
     return { add, upd };

@@ -37,6 +37,8 @@
     gwsTwoWay: 80, gwsOneWay: 55, gwMinFlow: 1000, // pcu/h (tổng 2 chiều) tối thiểu để xét sóng xanh
     couplingHigh: 1.6, couplingLow: 0.9, // chỉ số ghép nối q_2chiều(pcu/h)/L(m): ≥ cao → phối hợp; < thấp → độc lập
     vDefault: 30,         // km/h khi thiếu số liệu vận tốc
+    exchangeRate: 0.08,   // tỷ lệ xe kết thúc/bắt đầu chuyến tại nút thường (vào hẻm, nhà, điểm đỗ)
+    fifo: 0.5,            // mức FIFO khi nhánh ≥ 2 làn (1 = FIFO chặt: 1 hướng tắc chặn cả nhánh; 0 = làn rẽ tách hẳn)
     pcu: { xe_may: 0.3, o_to: 1.0, xe_tai: 2.0, xe_buyt: 2.5 },
     tileUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', // CARTO Voyager: chạy được cả khi mở file:// (OSM chặn yêu cầu không có Referer)
   };
@@ -63,6 +65,7 @@
       n.name = n.name || n.id;
       n.signalized = n.signalized !== false;
       n.control = n.control || 'fixed';
+      n.landuse = n.landuse || 'thuong';
       n.width = U.num(n.width, 20);
       n.plans = n.plans || {};
       n.opt = n.opt || {};
@@ -210,16 +213,17 @@
    * và cột "ra khỏi mạng" để hấp thụ chênh lệch. Trọng số mồi: đi thẳng 1.0, rẽ 0.35, quay đầu 0.
    * Kết quả bảo đảm lưu lượng mô phỏng trên mỗi nhánh khớp số đo đếm khi mạng chưa quá bão hoà. */
   M.estimateTurning = function (net, opts) {
-    const o = Object.assign({ wThrough: 1.0, wTurn: 0.35, slack: 0.08, iters: 40 }, opts || {});
+    const o = Object.assign({ wThrough: 1.0, wTurn: 0.35, iters: 40 }, opts || {});
     const { links, inL, outL, N } = net;
-    for (const l of links) { l.turn = []; l.exitFrac = 0; l.supply = 0; l.srcRate = 0; }
+    for (const l of links) { l.turn = []; l.exitFrac = 0; l.supply = 0; l.srcRate = 0; l.sinkRate = 0; l.entry = !inL[l.u].length; }
     for (let n = 0; n < N; n++) {
       const ins = inL[n], outs = outL[n];
       const qin = U.sum(ins, i => links[i].q), qout = U.sum(outs, j => links[j].q);
       const tot = Math.max(qin, qout);
       if (!ins.length) { for (const j of outs) links[j].srcRate = links[j].q; continue; }
       if (!outs.length) { for (const i of ins) links[i].exitFrac = 1; continue; }
-      const eps = o.slack * tot + 1e-6;
+      // lượng xe trao đổi với công trình/hẻm quanh nút (kết thúc & bắt đầu chuyến) theo loại hình sử dụng đất
+      const eps = M.exchangeRate(net.nodes[n], net.P) * tot + 1e-6;
       const E = qin - qout + eps > eps ? qin - qout + eps : eps;   // cột "ra khỏi mạng"
       const Ssrc = qout - qin + eps > eps ? qout - qin + eps : eps; // hàng "nguồn"
       const R = ins.length + 1, Cc = outs.length + 1;
@@ -252,18 +256,40 @@
         if (rs <= 0) { li.exitFrac = 1; continue; }
         const ex = T[a * Cc + outs.length] / rs;
         li.exitFrac = ex;
+        let ts = 0; for (let b = 0; b < outs.length; b++) ts += T[a * Cc + b];
         for (let b = 0; b < outs.length; b++) {
           const v = T[a * Cc + b];
           if (v <= 0) continue;
-          li.turn.push({ j: outs[b], p: v / rs / Math.max(1e-9, 1 - ex) });
+          const p = v / Math.max(1e-9, ts);
+          li.turn.push({ j: outs[b], p });
           links[outs[b]].supply += v;
+          // xe kết thúc chuyến tại khu vực này: qua nút rồi rời mạng giữa đoạn nhánh ra (vào nhà, văn phòng, bãi đỗ…)
+          links[outs[b]].sinkRate += T[a * Cc + outs.length] * p;
         }
+        if (ts <= 0) li.exitFrac = 1;
       }
       for (let b = 0; b < outs.length; b++) links[outs[b]].srcRate += T[ins.length * Cc + b];
     }
     for (const l of links) {
+      l.sinkFrac = l.sinkRate > 0 ? l.sinkRate / (l.supply + l.sinkRate) : 0; // tỷ lệ rời mạng giữa đoạn
       l.upShare = l.q > 0 ? U.clamp(l.supply / l.q, 0, 1) : 0; // phần lưu lượng đến từ nút thượng lưu
     }
+  };
+
+  /* Loại hình sử dụng đất quanh nút → tỷ lệ xe kết thúc/bắt đầu chuyến tại khu vực (so với lưu lượng qua nút). */
+  M.LANDUSE = {
+    thuong: { label: 'Đô thị thông thường', r: null },
+    dan_cu: { label: 'Khu dân cư', r: 0.15 },
+    van_phong: { label: 'Văn phòng / cơ quan', r: 0.15 },
+    thuong_mai: { label: 'TTTM / chợ / dịch vụ', r: 0.22 },
+    truong_hoc: { label: 'Trường học / bệnh viện', r: 0.18 },
+    bai_do: { label: 'Bãi đỗ / bến xe / nhà ga', r: 0.35 },
+    cua_ngo: { label: 'Cửa ngõ biên mạng', r: 0.5 },
+  };
+  M.exchangeRate = function (node, P) {
+    if (node && isFinite(node.exchange) && node.exchange !== null && node.exchange !== '') return U.clamp(+node.exchange, 0, 1);
+    const lu = M.LANDUSE[(node && node.landuse) || 'thuong'];
+    return lu && lu.r !== null ? lu.r : P.exchangeRate;
   };
 
   /* ── Kiểm tra dữ liệu ─────────────────────────────── */

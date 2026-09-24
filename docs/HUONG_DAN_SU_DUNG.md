@@ -67,6 +67,38 @@ Thẻ **Mô phỏng**:
 - **Đối sánh A/B**: chạy nhanh hai kịch bản (khởi động 10 phút, đo 30 phút) và so sánh tổng trễ, vận tốc, số lần dừng, thông lượng, tràn ngược, chờ vào mạng. Diễn biến theo thời gian xem ở khung dưới.
 - Kiểm tra độ bền phương án: **hệ số nhu cầu** (ví dụ ×1,1) và **dao động nhu cầu CV** (ví dụ 0,15).
 
+### Xe vào – ra mạng (cơ chế phát sinh / thu hút chuyến đi)
+Xe vào mạng theo ba cách:
+- từ **nhánh biên** (cửa ngõ, nút ngoài cùng);
+- **phát sinh giữa đoạn**: xe từ nhà ở, cơ quan, bãi đỗ, hẻm đi ra đường;
+- từ nút thượng lưu đi xuống.
+
+Xe ra mạng theo hai cách:
+- đi hết **nhánh biên** thì rời mạng;
+- **kết thúc chuyến giữa đoạn**: sau khi qua nút, một phần xe rẽ vào nhà, văn phòng, TTTM, bãi đỗ. Phần xe này không phải chờ đèn tại nút kế tiếp.
+
+Tỷ lệ trao đổi này được ước lượng từ số đếm (cân bằng Furness) và phụ thuộc **loại khu vực quanh nút**, chọn ở cột phải khi nhấp một nút hoặc qua cột `su_dung_dat` trong CSV:
+
+| Loại khu vực | Tỷ lệ trao đổi |
+|---|---|
+| Thông thường | 8% |
+| Dân cư | 15% |
+| Văn phòng | 15% |
+| TTTM / chợ | 22% |
+| Trường học / bệnh viện | 18% |
+| Bãi đỗ / bến xe | 35% |
+| Cửa ngõ | 50% |
+
+Theo dõi cân bằng xe khi mô phỏng:
+- **HUD trên bản đồ**: xe vào / ra (pcu/h), kèm nhãn *cân bằng*, *tích luỹ* hoặc *đang thoát*.
+- **Khung dưới → Diễn biến mô phỏng → "Cân bằng xe vào / ra mạng"**: nét liền là vào, nét đứt là ra.
+- **Chọn một vùng** (thẻ Tối ưu → bảng Vùng) khi đang mô phỏng, cột phải hiện **cân bằng xe của vùng**: vào qua biên, phát sinh trong vùng, ra qua biên, kết thúc chuyến trong vùng, và phần tích luỹ.
+
+Cách đọc:
+- Mạng bắt đầu trống nên **15–20 phút đầu số xe luôn tăng** (giai đoạn lấp đầy), sau đó vào ≈ ra.
+- Nếu tích luỹ vẫn tăng mãi, tức nhu cầu vượt năng lực: vùng quá bão hoà hoặc có tràn ngược. Cần kiểm tra lại số liệu q, S hoặc phương án đèn.
+- Chọn **Hồ sơ nhu cầu "Dạng đỉnh"** để mô phỏng giờ cao điểm tăng rồi giảm, và quan sát hàng chờ tan dần sau đỉnh.
+
 ## 6. Báo cáo, xuất dữ liệu
 - **Phiếu cài đặt tủ (CSV)**: C, offset, xanh từng pha hiện trạng → đề xuất theo khung giờ, vùng và phương án.
 - **Báo cáo phương án (HTML)**: phương pháp, bảng chỉ tiêu, vùng, hành lang, khuyến nghị, giản đồ đề xuất. Có thể in ra PDF.

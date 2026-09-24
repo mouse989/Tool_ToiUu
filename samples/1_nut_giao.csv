@@ -1,13 +1,13 @@
-﻿ma_nut,ten_nut,lat,lon,be_rong_m,co_den,dieu_khien
-N0101,Đường ĐT-01 × Đường BN-01,10.772835,106.694737,18,1,fixed
-N0102,Đường ĐT-01 × Hẻm lớn BN-02,10.772688,106.698223,18,1,fixed
-N0103,Đường ĐT-01 × Hẻm lớn BN-03,10.772291,106.702319,18,1,fixed
-N0104,Đường ĐT-01 × Trục BN-04,10.771697,106.705643,24,1,fixed
-N0201,Hẻm lớn ĐT-02 × Đường BN-01,10.776061,106.694859,18,1,fixed
-N0202,Hẻm lớn ĐT-02 × Hẻm lớn BN-02,10.775453,106.699081,12,1,fixed
-N0203,Hẻm lớn ĐT-02 × Hẻm lớn BN-03,10.775733,106.702259,12,1,fixed
-N0204,Hẻm lớn ĐT-02 × Trục BN-04,10.775647,106.705487,24,1,fixed
-N0301,Trục ĐT-03 × Đường BN-01,10.779628,106.69586,24,1,fixed
-N0302,Trục ĐT-03 × Hẻm lớn BN-02,10.779038,106.699032,24,1,fixed
-N0303,Trục ĐT-03 × Hẻm lớn BN-03,10.778762,106.702512,24,1,fixed
-N0304,Trục ĐT-03 × Trục BN-04,10.779111,106.706272,24,1,fixed
+﻿ma_nut,ten_nut,lat,lon,be_rong_m,co_den,dieu_khien,su_dung_dat
+N0101,Đường ĐT-01 × Đường BN-01,10.772835,106.694737,18,1,fixed,thuong
+N0102,Đường ĐT-01 × Hẻm lớn BN-02,10.772167,106.698649,18,1,fixed,dan_cu
+N0103,Đường ĐT-01 × Hẻm lớn BN-03,10.772778,106.701537,18,1,fixed,dan_cu
+N0104,Đường ĐT-01 × Trục BN-04,10.772151,106.705184,24,1,fixed,thuong
+N0201,Hẻm lớn ĐT-02 × Đường BN-01,10.776144,106.695163,18,1,fixed,thuong
+N0202,Hẻm lớn ĐT-02 × Hẻm lớn BN-02,10.775701,106.698931,12,1,fixed,van_phong
+N0203,Hẻm lớn ĐT-02 × Hẻm lớn BN-03,10.775751,106.701838,12,1,fixed,thuong
+N0204,Hẻm lớn ĐT-02 × Trục BN-04,10.775825,106.705083,24,1,fixed,thuong
+N0301,Trục ĐT-03 × Đường BN-01,10.779841,106.69526,24,1,fixed,dan_cu
+N0302,Trục ĐT-03 × Hẻm lớn BN-02,10.779613,106.698991,24,1,fixed,thuong
+N0303,Trục ĐT-03 × Hẻm lớn BN-03,10.778878,106.702704,24,1,fixed,thuong
+N0304,Trục ĐT-03 × Trục BN-04,10.778609,106.706211,24,1,fixed,dan_cu

@@ -47,6 +47,22 @@ Tại mỗi nút, lập ma trận T có hàng là các nhánh vào i, thêm mộ
 Kết quả là tỷ lệ rẽ p_ij, tỷ lệ ra khỏi mạng và lưu lượng phát sinh giữa đoạn. Với mạng mẫu, sai số cân bằng dưới 2%.
 Khi camera AI cung cấp số đếm hướng rẽ, có thể thay bằng số đo trực tiếp.
 
+**Vị trí xe vào / ra mạng.**
+- Xe kết thúc chuyến (cột "ra khỏi mạng") được cho **đi qua nút rồi rời mạng tại giữa đoạn nhánh ra**, tương ứng vào nhà, cơ quan, TTTM, bãi đỗ. Xe bắt đầu chuyến được đưa vào giữa đoạn. Nhờ vậy lưu lượng tại vạch dừng mỗi nhánh vẫn khớp số đếm, và xe về công trình không phải chờ đèn ở nút kế tiếp.
+- Tỷ lệ trao đổi phụ thuộc loại khu vực quanh nút:
+
+  | Loại khu vực | Tỷ lệ trao đổi |
+  |---|---|
+  | Thông thường | 8% |
+  | Dân cư | 15% |
+  | Văn phòng | 15% |
+  | TTTM | 22% |
+  | Trường học / bệnh viện | 18% |
+  | Bãi đỗ / bến xe | 35% |
+  | Cửa ngõ | 50% |
+
+- Kiểm thử xác nhận: khi mạng chưa bão hoà, tổng xe vào ≈ tổng xe ra (sai lệch dưới 3%), và lưu lượng mô phỏng tại vạch dừng khớp số đo (sai lệch dưới 10%).
+
 ### 2.2. Tối ưu nút đơn
 - Tỷ số dòng tới hạn: y_k = max(q/S) trên các nhánh do pha k phục vụ; Y = Σy_k.
 - Thời gian tổn thất mỗi pha: l₁ + vàng + đỏ toàn phần − e (l₁ = 2 s khởi động, e = 2 s tận dụng vàng).
@@ -89,7 +105,9 @@ Khi camera AI cung cấp số đếm hướng rẽ, có thể thay bằng số �
 
 ### 2.7. Mô phỏng CTM và điều khiển thích ứng
 - Ô dài ≥ v_f·Δt; biểu đồ cơ bản tam giác lấy v_f từ số đo, Q = S, k_j = số làn/7 m.
-- Tại nút: nhánh chỉ xả khi đang xanh hiệu dụng; phân nhánh theo p_ij với ràng buộc FIFO.
+- Tại nút: nhánh chỉ xả khi đang xanh hiệu dụng; phân nhánh theo p_ij.
+- **FIFO mềm**: nhánh ≥ 2 làn có tham số θ = 0,5, nên một hướng rẽ bị tắc chỉ chặn một phần nhánh. FIFO chặt (θ = 1) sẽ gây khoá mạng giả tạo khi nhu cầu cao điểm kéo dài.
+- **Hồ sơ nhu cầu dạng đỉnh**: nhu cầu thay đổi 70% → 100% → 70% theo thời gian mô phỏng.
 - Bốn chế độ điều khiển:
   1. **Cố định**: chạy theo giản đồ pha.
   2. **Xe kích hoạt**: theo xanh tối thiểu/tối đa, kết thúc pha khi hết hàng chờ gần vạch dừng.

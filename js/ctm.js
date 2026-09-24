@@ -54,6 +54,16 @@
     const srcRate = new Float64Array(NL);
     for (let i = 0; i < NL; i++) srcRate[i] = links[i].srcRate / 3600 * c.demandMul;
     const noiseF = new Float64Array(NL).fill(1);
+    // điểm phát sinh / thu hút giữa đoạn (ô giữa); nhánh vào từ biên mạng phát xe từ ô đầu
+    const sm = new Int32Array(NL), sinkF = new Float64Array(NL), theta = new Float64Array(NL);
+    for (let i = 0; i < NL; i++) {
+      sm[i] = links[i].entry ? c0[i] : c0[i] + Math.floor(nc[i] / 2);
+      sinkF[i] = links[i].sinkFrac || 0;
+      theta[i] = links[i].lanes >= 2 ? U.clamp(P.fifo ?? 0.5, 0, 1) : 1;
+    }
+    const Ttot = c.total || (c.warmup + c.duration);
+    const demandF = (tt) => c.profile === 'peak' ? 0.7 + 0.3 * Math.sin(Math.PI * U.clamp(tt / Ttot, 0, 1)) : 1;
+    const srcInj = new Float64Array(NL), rJ = new Float64Array(NL);
     const rnd = U.rng(c.seed);
 
     // ── bộ điều khiển ──
@@ -181,76 +191,87 @@
     const K = {
       vht: new Float64Array(NL), vkt: new Float64Array(NL), stops: new Float64Array(NL), exits: 0, entries: 0,
       spillSec: new Float64Array(NL), spillEv: new Float64Array(NL), qmax: new Float64Array(NL), bufWait: 0, out: new Float64Array(NL),
+      inNode: new Float64Array(NL), src: new Float64Array(NL), sink: new Float64Array(NL), exitNode: new Float64Array(NL),
     };
     const spillNow = new Uint8Array(NL);
     const series = [];
-    let acc = { vht: 0, vkt: 0, exits: 0, t0: 0 };
+    let acc = { vht: 0, vkt: 0, exits: 0, entries: 0, t0: 0 };
+    let vehStart = null;
     let t = 0;
     const inflowFirst = new Float64Array(NL);
     const sendLast = new Float64Array(NL);
-    const phi = new Float64Array(NL);
     const recv = new Float64Array(NL), dem = new Float64Array(NL);
     const recorders = [];
 
+    const vehNow = () => { let v = 0; for (let x = 0; x < NC; x++) v += n[x]; return v; };
     function step() {
       const measuring = t >= c.warmup;
+      if (measuring && vehStart === null) vehStart = vehNow();
       if (c.noiseCV > 0 && Math.round(t) % 300 === 0) for (let i = 0; i < NL; i++) noiseF[i] = Math.max(0, 1 + c.noiseCV * rnd.normal());
       updateSignals(t);
-      // 1) dòng trong liên kết
+      // 1) dòng trong liên kết (tại ô giữa: một phần xe rời mạng — vào nhà, cơ quan, bãi đỗ — không chiếm ô sau)
       for (let i = 0; i < NL; i++) {
         const a = c0[i], b = a + nc[i] - 1;
         for (let x = a; x < b; x++) {
           const s = Math.min(n[x] * fr[x], Qc[x]);
-          const r = Math.min(Qc[x + 1], del[x + 1] * (Nmax[x + 1] - n[x + 1]));
+          let r = Math.min(Qc[x + 1], del[x + 1] * (Nmax[x + 1] - n[x + 1]));
+          if (x + 1 === sm[i] && sinkF[i] > 0) r = r / (1 - sinkF[i]);
           yflow[x] = Math.max(0, Math.min(s, r));
         }
         const s = greenNow[i] ? Math.min(n[b] * fr[b], Qc[b], satStep[i]) : 0;
         sendLast[i] = s;
         recv[i] = Math.max(0, Math.min(Qc[a], del[a] * (Nmax[a] - n[a]))); // khả năng nhận của ô đầu
-        dem[i] = 0; inflowFirst[i] = 0;
+        if (sm[i] === a && sinkF[i] > 0) recv[i] /= (1 - sinkF[i]);
+        dem[i] = 0; inflowFirst[i] = 0; srcInj[i] = 0;
       }
-      // 2) nút: nhu cầu tới từng nhánh ra
+      // 2) nút: nhu cầu tới từng nhánh ra; FIFO mềm theo số làn (1 hướng tắc không chặn hoàn toàn nhánh nhiều làn)
       for (let i = 0; i < NL; i++) {
         if (sendLast[i] <= 0) continue;
-        const l = links[i], e = 1 - l.exitFrac;
-        for (const tr of l.turn) dem[tr.j] += sendLast[i] * e * tr.p;
+        for (const tr of links[i].turn) dem[tr.j] += sendLast[i] * tr.p;
       }
-      for (let i = 0; i < NL; i++) {
-        if (sendLast[i] <= 0) { phi[i] = 0; continue; }
-        let f = 1;
-        for (const tr of links[i].turn) {
-          const j = tr.j;
-          if (dem[j] > recv[j] && dem[j] > 0) f = Math.min(f, recv[j] / dem[j]);
-        }
-        phi[i] = f;
-      }
+      for (let j = 0; j < NL; j++) rJ[j] = dem[j] > recv[j] && dem[j] > 0 ? recv[j] / dem[j] : 1;
       for (let i = 0; i < NL; i++) {
         const b = c0[i] + nc[i] - 1;
-        const f = sendLast[i] * phi[i];
-        yflow[b] = f;
-        if (f <= 0) continue;
         const l = links[i];
-        for (const tr of l.turn) inflowFirst[tr.j] += f * (1 - l.exitFrac) * tr.p;
-        const ex = f * l.exitFrac;
-        if (measuring) { K.exits += ex; acc.exits += ex; }
-        if (!l.turn.length && measuring) { K.exits += f * (1 - l.exitFrac); acc.exits += f * (1 - l.exitFrac); }
+        if (sendLast[i] <= 0) { yflow[b] = 0; continue; }
+        if (!l.turn.length) { // nhánh ra biên mạng: rời mạng tại vạch dừng
+          yflow[b] = sendLast[i];
+          if (measuring) { K.exits += sendLast[i]; acc.exits += sendLast[i]; K.exitNode[i] += sendLast[i]; K.out[i] += sendLast[i]; }
+          continue;
+        }
+        let fifo = 1;
+        for (const tr of l.turn) fifo = Math.min(fifo, rJ[tr.j]);
+        let f = 0;
+        for (const tr of l.turn) {
+          const ph = theta[i] * fifo + (1 - theta[i]) * rJ[tr.j];
+          const fij = sendLast[i] * tr.p * ph;
+          inflowFirst[tr.j] += fij; f += fij;
+          if (measuring) K.inNode[tr.j] += fij;
+        }
+        yflow[b] = f;
         if (measuring) K.out[i] += f;
       }
-      // 3) nguồn
+      // 3) rời mạng & phát sinh giữa đoạn
+      const dmf = demandF(t);
       for (let i = 0; i < NL; i++) {
-        buf[i] += srcRate[i] * noiseF[i] * dt;
-        const a = c0[i];
-        const room = Math.max(0, Math.min(Qc[a], del[a] * (Nmax[a] - n[a])) - inflowFirst[i]);
+        const a = c0[i], m = sm[i];
+        let sink = 0, inM;
+        if (m === a) { sink = inflowFirst[i] * sinkF[i]; inflowFirst[i] -= sink; inM = inflowFirst[i]; }
+        else { sink = yflow[m - 1] * sinkF[i]; inM = yflow[m - 1] - sink; }
+        if (measuring && sink > 0) { K.exits += sink; acc.exits += sink; K.sink[i] += sink; }
+        buf[i] += srcRate[i] * noiseF[i] * dmf * dt;
+        const room = Math.max(0, Math.min(Qc[m], del[m] * (Nmax[m] - n[m])) - inM);
         const inj = Math.min(buf[i], room);
-        buf[i] -= inj; inflowFirst[i] += inj;
-        if (measuring) { K.entries += inj; K.bufWait += buf[i] * dt; }
+        buf[i] -= inj; srcInj[i] = inj;
+        if (measuring) { K.entries += inj; acc.entries += inj; K.src[i] += inj; K.bufWait += buf[i] * dt; }
       }
       // 4) cập nhật ô + chỉ tiêu
       for (let i = 0; i < NL; i++) {
         const a = c0[i], b = a + nc[i] - 1, cl = cellLen[i];
         let occ = 0, cap = 0;
         for (let x = a; x <= b; x++) {
-          const inflow = x === a ? inflowFirst[i] : yflow[x - 1];
+          let inflow = x === a ? inflowFirst[i] : yflow[x - 1];
+          if (x === sm[i]) { if (x > a) inflow *= (1 - sinkF[i]); inflow += srcInj[i]; }
           const wasQ = n[x] > 1.5 * ncrit[x];
           n[x] += inflow - yflow[x];
           if (n[x] < 0) n[x] = 0;
@@ -279,8 +300,8 @@
         let veh = 0; for (let x = 0; x < NC; x++) veh += n[x];
         let bufT = 0; for (let i = 0; i < NL; i++) bufT += buf[i];
         let sp = 0; for (let i = 0; i < NL; i++) sp += spillNow[i];
-        series.push({ t, veh, buf: bufT, speed: acc.vht > 0 ? acc.vkt / acc.vht * 3.6 : 0, thr: acc.exits / span * 3600, spill: sp });
-        acc = { vht: 0, vkt: 0, exits: 0, t0: t };
+        series.push({ t, veh, buf: bufT, speed: acc.vht > 0 ? acc.vkt / acc.vht * 3.6 : 0, thr: acc.exits / span * 3600, inr: acc.entries / span * 3600, spill: sp });
+        acc = { vht: 0, vkt: 0, exits: 0, entries: 0, t0: t };
       }
     }
 
@@ -318,6 +339,21 @@
       },
       stopRecording() { recorders.length = 0; },
       /* Kết quả tổng hợp sau thời gian đo. */
+      vehNow,
+      /* Cân bằng xe của một vùng (tập nút): vào qua biên + phát sinh bên trong, ra qua biên + kết thúc chuyến bên trong. */
+      zoneBalance(nodeSet) {
+        let inB = 0, outB = 0, src = 0, sink = 0, inside = 0;
+        for (let i = 0; i < NL; i++) {
+          const l = links[i], inV = nodeSet.has(l.v), inU = nodeSet.has(l.u);
+          if (inV && !inU) inB += K.inNode[i];
+          if (inU && !inV) outB += K.inNode[i];
+          if (inV) {
+            src += K.src[i]; sink += K.sink[i] + K.exitNode[i];
+            for (let k = 0; k < nc[i]; k++) inside += n[c0[i] + k];
+          }
+        }
+        return { inB, outB, src, sink, inside, span: Math.max(1, t - c.warmup) };
+      },
       results() {
         const span = Math.max(1, t - c.warmup);
         let vht = 0, vkt = 0, freeT = 0, stops = 0, spillSec = 0, spillEv = 0;
@@ -336,7 +372,9 @@
           avgSpeed: vht > 0 ? vkt / vht * 3.6 : 0,
           delayPerVehKm: vkt > 0 ? delayTot / (vkt / 1000) : 0,   // s/pcu·km
           stopsPerVehKm: vkt > 0 ? stops / (vkt / 1000) : 0,
-          throughput: served / span * 3600, entries: K.entries,
+          throughput: served / span * 3600, entries: K.entries, exits: K.exits,
+          accum: vehStart === null ? 0 : vehNow() - vehStart,          // xe tích luỹ thêm trong mạng trong kỳ đo
+          bufEnd: U.sum(Array.from(buf)),                              // xe đang chờ vào mạng cuối kỳ
           spillLinkMin: spillSec / 60, spillEvents: spillEv, bufWaitH: K.bufWait / 3600,
           perLink,
         };
