@@ -99,6 +99,26 @@ Cách đọc:
 - Nếu tích luỹ vẫn tăng mãi, tức nhu cầu vượt năng lực: vùng quá bão hoà hoặc có tràn ngược. Cần kiểm tra lại số liệu q, S hoặc phương án đèn.
 - Chọn **Hồ sơ nhu cầu "Dạng đỉnh"** để mô phỏng giờ cao điểm tăng rồi giảm, và quan sát hàng chờ tan dần sau đỉnh.
 
+### Chỉ số mạng lưới (khung phải, luôn hiển thị)
+Phía trên khung phải luôn có bảng **Chỉ số mạng lưới**, dù có chọn nút / nhánh hay không. Bấm ▾ để thu gọn.
+
+- **Khi chưa mô phỏng** (tính theo HCM, cho phương án đang xem):
+  - trễ trung bình mạng và mức phục vụ LOS;
+  - số nút ở mức E–F;
+  - số nhánh quá tải (x ≥ 1) và gần tải (0,85–1);
+  - phân bố mức phục vụ A–F của các nút;
+  - tóm tắt kết quả tối ưu nếu đã chạy.
+- **Khi mô phỏng** (luỹ kế từ đầu, cập nhật liên tục):
+  - **Thông suốt**: % xe tới không phải dừng.
+  - **Tỷ lệ dừng**: xe gặp đèn đỏ hoặc đuôi hàng chờ.
+  - **Trễ TB**: tính cho mỗi xe vào mạng.
+  - **Vận tốc TB**.
+  - **Đang xếp hàng**: tổng số xe trong hàng chờ, kèm nhánh có hàng chờ dài nhất. Nhấp vào tên nhánh để chọn nhánh đó.
+  - **Tràn ngược**: số nhánh bị hàng chờ lấp ≥ 80% chiều dài.
+  - **Cân bằng xe**: đã vào / đang chạy / chờ vào / đã ra.
+  - **Phân bố mức phục vụ** các nút theo trễ mô phỏng.
+  - **Biểu đồ tỷ lệ dừng** theo từng phút.
+
 ## 6. Báo cáo, xuất dữ liệu
 - **Phiếu cài đặt tủ (CSV)**: C, offset, xanh từng pha hiện trạng → đề xuất theo khung giờ, vùng và phương án.
 - **Báo cáo phương án (HTML)**: phương pháp, bảng chỉ tiêu, vùng, hành lang, khuyến nghị, giản đồ đề xuất. Có thể in ra PDF.

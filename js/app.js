@@ -492,7 +492,87 @@
     return ring + t;
   }
 
+  /* ── Chỉ số đánh giá toàn mạng (luôn hiển thị ở khung phải) ── */
+  let kpiCollapsed = false;
+  function losStack(counts) {
+    const L = ['A', 'B', 'C', 'D', 'E', 'F'], tot = L.reduce((a, k) => a + (counts[k] || 0), 0) || 1;
+    return `<div class="losbar" title="Phân bố mức phục vụ các nút">${L.filter(k => counts[k]).map(k => `<i style="width:${(counts[k] / tot * 100).toFixed(1)}%;background:${losColor(k)}" title="LOS ${k}: ${counts[k]} nút"></i>`).join('')}</div>
+      <div class="losl">${L.map(k => `<span>${k} ${counts[k] || 0}</span>`).join('')}</div>`;
+  }
+  function renderNetKpi() {
+    const box = $('netKpi');
+    if (!S.project) { box.innerHTML = ''; return; }
+    const head = (title) => `<div class="hd"><b>${title}</b><button class="btn sm ghost" id="kpiTog" title="Thu gọn / mở rộng">${kpiCollapsed ? '▸' : '▾'}</button></div>`;
+    const net = getNet();
+    if (S.sim) {
+      const m = S.sim.netMetrics();
+      const last = S.sim.series[S.sim.series.length - 1];
+      const t = m.t, clock = `${String(Math.floor(t / 3600)).padStart(2, '0')}:${String(Math.floor(t % 3600 / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+      const stopR = m.arr > 1 ? m.stops / m.arr : null;
+      const perVeh = m.entries > 1 ? m.delay / m.entries : null;
+      // LOS theo trễ mô phỏng từng nút
+      const cnt = {};
+      for (let v = 0; v < net.N; v++) {
+        if (!net.nodes[v].signalized || !net.inL[v].length) continue;
+        let d = 0, o = 0; for (const i of net.inL[v]) { d += m.linkDelay[i]; o += S.sim.K.out[i]; }
+        if (o < 1) continue;
+        const los = SG.los(d / o, 0); cnt[los] = (cnt[los] || 0) + 1;
+      }
+      const ql = m.qmaxI >= 0 ? net.links[m.qmaxI] : null;
+      box.innerHTML = head(`Chỉ số mạng lưới · mô phỏng ${clock}`) + (kpiCollapsed ? '' : `
+        <div class="tiles">
+          <div class="tile"><small>Thông suốt</small><b>${stopR === null ? '—' : Math.round((1 - stopR) * 100) + '%'}</b><small>pcu tới không phải dừng</small></div>
+          <div class="tile"><small>Tỷ lệ dừng</small><b>${stopR === null ? '—' : Math.round(stopR * 100) + '%'}</b><small>${U.fmt(m.stops)} / ${U.fmt(m.arr)} pcu tới</small></div>
+          <div class="tile"><small>Trễ TB</small><b>${perVeh === null ? '—' : Math.round(perVeh) + ' s'}</b><small>mỗi pcu vào mạng · ${U.fmt(m.delay / 3600)} xe·h</small></div>
+          <div class="tile"><small>Vận tốc TB</small><b>${last ? last.speed.toFixed(1) : '—'}</b><small>km/h (phút gần nhất)</small></div>
+          <div class="tile"><small>Đang xếp hàng</small><b>${U.fmt(m.queued)}</b><small>pcu${ql ? ` · dài nhất <span class="link" id="kpiQl" style="cursor:pointer;text-decoration:underline dotted">${esc(net.nodes[ql.v].id)}←${esc(net.nodes[ql.u].id)}</span> ${Math.round(m.qmaxM)} m` : ''}</small></div>
+          <div class="tile"><small>Tràn ngược</small><b ${m.spill ? 'class="bad"' : ''}>${m.spill}</b><small>nhánh ≥ ${Math.round(S.project.params.spillThreshold * 100)}% chiều dài</small></div>
+        </div>
+        ${m.spill ? `<div class="row"><span class="badge bad">⚠ ${m.spill} nhánh đang tràn ngược — nguy cơ khoá nút</span></div>` : ''}
+        <div class="flowl">đã vào <b class="num">${U.fmt(m.entries)}</b> · đang chạy <b class="num">${U.fmt(m.onroad)}</b> · chờ vào <b class="num">${U.fmt(m.bufNow)}</b> · đã ra <b class="num">${U.fmt(m.exits)}</b> pcu ${last ? balTag(last) : ''}</div>
+        <div class="flowl" style="margin-top:8px">Mức phục vụ nút (trễ mô phỏng)</div>${losStack(cnt)}
+        <canvas id="kpiSpark" aria-label="Tỷ lệ dừng theo phút"></canvas>`);
+      if (!kpiCollapsed) {
+        drawKpiSpark(S.sim.series);
+        if ($('kpiQl')) $('kpiQl').onclick = () => select({ type: 'link', i: m.qmaxI });
+      }
+    } else {
+      const ana = getAna();
+      const cnt = {}; let over = 0, hi = 0, ef = 0, nN = 0;
+      ana.nodes.forEach(a => { if (!a) return; nN++; cnt[a.los] = (cnt[a.los] || 0) + 1; if (a.los === 'E' || a.los === 'F') ef++; });
+      ana.perLink.forEach(a => { if (!a) return; if (a.x >= 1) over++; else if (a.x >= 0.85) hi++; });
+      const r = result();
+      box.innerHTML = head(`Chỉ số mạng lưới · ${S.scenario === 'opt' ? 'đề xuất' : 'hiện trạng'} (HCM)`) + (kpiCollapsed ? '' : `
+        <div class="tiles">
+          <div class="tile"><small>Trễ TB mạng</small><b>${ana.avgDelay.toFixed(1)}</b><small>s/pcu · LOS ${SG.los(ana.avgDelay, 0)}</small></div>
+          <div class="tile"><small>Nút LOS E–F</small><b ${ef ? 'class="bad"' : ''}>${ef}</b><small>/ ${nN} nút có đèn</small></div>
+          <div class="tile"><small>Nhánh quá tải</small><b ${over ? 'class="bad"' : ''}>${over}</b><small>x ≥ 1 · ${hi} nhánh 0,85–1</small></div>
+        </div>
+        <div class="flowl" style="margin-top:8px">Mức phục vụ nút</div>${losStack(cnt)}
+        ${r ? `<div class="flowl">Tối ưu (TRANSYT): trễ ${r.base.delay.toFixed(1)} → <b>${r.opt.delay.toFixed(1)}</b> s/pcu · dừng ${r.base.stops.toFixed(2)} → <b>${r.opt.stops.toFixed(2)}</b> · ${r.zones.length} vùng</div>` : ''}
+        <div class="note" style="margin:6px 0 0">Chạy mô phỏng (thẻ Mô phỏng) để xem chỉ số động: thông suốt, dừng, hàng chờ, tràn ngược.</div>`);
+    }
+    if ($('kpiTog')) $('kpiTog').onclick = () => { kpiCollapsed = !kpiCollapsed; renderNetKpi(); };
+  }
+  function drawKpiSpark(series) {
+    const cv = $('kpiSpark'); if (!cv) return;
+    const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+    const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = r.width, h = r.height, pts = series.slice(-40);
+    ctx.clearRect(0, 0, w, h);
+    const bw = w / 40;
+    pts.forEach((p, k) => {
+      const bh = Math.max(1, (p.stopRate || 0) * (h - 14));
+      ctx.fillStyle = k === pts.length - 1 ? css('--s1') : css('--s8'); ctx.globalAlpha = k === pts.length - 1 ? 1 : 0.55;
+      ctx.fillRect(k * bw + 1, h - 12 - bh, Math.max(1, bw - 2), bh);
+    });
+    ctx.globalAlpha = 1; ctx.fillStyle = css('--muted'); ctx.font = '10px ' + css('--font');
+    ctx.fillText('tỷ lệ dừng theo phút (40 phút gần nhất)', 0, h - 2);
+  }
+
   function renderInspector() {
+    renderNetKpi();
     const el = $('insp');
     const sel = S.sel;
     if (!S.project) { el.innerHTML = ''; return; }
@@ -1151,6 +1231,7 @@
   }
   function updateSimKpi() {
     const hud = $('hud'), box = $('simKpi');
+    renderNetKpi();
     if (!S.sim) { if (box) box.innerHTML = ''; return; }
     const s = S.sim, last = s.series[s.series.length - 1] || { veh: 0, speed: 0, thr: 0, spill: 0, buf: 0 };
     const t = s.t, hh = Math.floor(t / 3600), mm = Math.floor(t % 3600 / 60), ss = Math.floor(t % 60);
@@ -1196,6 +1277,7 @@
       ${row('Tổng trễ (xe·h)', A.delayVehH, B.delayVehH, 0, 'lo')}
       ${row('Trễ / km (s/pcu·km)', A.delayPerVehKm, B.delayPerVehKm, 1, 'lo')}
       ${row('Vận tốc TB (km/h)', A.avgSpeed, B.avgSpeed, 1, 'hi')}
+      ${row('Tỷ lệ dừng (%)', A.stopRatio * 100, B.stopRatio * 100, 0, 'lo')}
       ${row('Dừng / km', A.stopsPerVehKm, B.stopsPerVehKm, 2, 'lo')}
       ${row('Thông lượng ra (pcu/h)', A.throughput, B.throughput, 0, 'hi')}
       ${row('Tràn ngược (nhánh·phút)', A.spillLinkMin, B.spillLinkMin, 0, 'lo')}

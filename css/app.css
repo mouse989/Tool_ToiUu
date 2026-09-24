@@ -130,6 +130,18 @@ select.sel,input.inp{background:var(--ground); border:1px solid var(--line); bor
 .dock-empty{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12.5px; padding:20px; text-align:center}
 .dock-legend{position:absolute; right:8px; top:4px; font-size:11px; color:var(--ink-2); display:flex; gap:10px; background:color-mix(in srgb, var(--surface) 85%, transparent); padding:2px 6px; border-radius:4px; pointer-events:none}
 
+/* ── chỉ số mạng lưới (khung phải) ── */
+#netKpi{flex:none; padding:10px 12px; border-bottom:1px solid var(--line); background:var(--surface); max-height:58%; overflow-y:auto}
+#netKpi:empty{display:none}
+#netKpi .hd{display:flex; align-items:center; gap:6px; margin-bottom:6px}
+#netKpi .hd b{font-size:11.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:600; flex:1}
+#netKpi .tiles{grid-template-columns:repeat(3,1fr)}
+#netKpi .tile b{font-size:17px}
+.losbar{display:flex; height:10px; border-radius:4px; overflow:hidden; margin:8px 0 2px; background:var(--sunk); gap:2px}
+.losbar i{display:block; height:100%}
+.losl{display:flex; justify-content:space-between; font-size:10.5px; color:var(--muted)}
+.flowl{font-size:11.5px; color:var(--ink-2); margin-top:6px}
+#kpiSpark{display:block; width:100%; height:46px; margin-top:6px}
 /* ── inspector ── */
 .insp h2{font-size:15px; margin:0 0 2px; line-height:1.25}
 .insp .sub{color:var(--muted); font-size:12px; margin-bottom:8px}

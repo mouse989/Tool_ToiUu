@@ -49,7 +49,8 @@
         ncrit[x] = kc * cl;
       }
     }
-    const yflow = new Float64Array(NC);          // dòng ra khỏi ô trong bước (để ước tính vận tốc)
+    const yflow = new Float64Array(NC);
+    const stopped = new Uint8Array(NC);          // dòng ra khỏi ô trong bước (để ước tính vận tốc)
     const buf = new Float64Array(NL);            // hàng đợi nguồn (xe chờ vào mạng)
     const srcRate = new Float64Array(NL);
     for (let i = 0; i < NL; i++) srcRate[i] = links[i].srcRate / 3600 * c.demandMul;
@@ -195,7 +196,7 @@
     };
     const spillNow = new Uint8Array(NL);
     const series = [];
-    let acc = { vht: 0, vkt: 0, exits: 0, entries: 0, t0: 0 };
+    let acc = { vht: 0, vkt: 0, exits: 0, entries: 0, stops: 0, arr: 0, t0: 0 };
     let vehStart = null;
     let t = 0;
     const inflowFirst = new Float64Array(NL);
@@ -246,7 +247,7 @@
           const ph = theta[i] * fifo + (1 - theta[i]) * rJ[tr.j];
           const fij = sendLast[i] * tr.p * ph;
           inflowFirst[tr.j] += fij; f += fij;
-          if (measuring) K.inNode[tr.j] += fij;
+          if (measuring) { K.inNode[tr.j] += fij; acc.arr += fij; }
         }
         yflow[b] = f;
         if (measuring) K.out[i] += f;
@@ -263,22 +264,21 @@
         const room = Math.max(0, Math.min(Qc[m], del[m] * (Nmax[m] - n[m])) - inM);
         const inj = Math.min(buf[i], room);
         buf[i] -= inj; srcInj[i] = inj;
-        if (measuring) { K.entries += inj; acc.entries += inj; K.src[i] += inj; K.bufWait += buf[i] * dt; }
+        if (measuring) { K.entries += inj; acc.entries += inj; acc.arr += inj; K.src[i] += inj; K.bufWait += buf[i] * dt; }
       }
       // 4) cập nhật ô + chỉ tiêu
       for (let i = 0; i < NL; i++) {
         const a = c0[i], b = a + nc[i] - 1, cl = cellLen[i];
         let occ = 0, cap = 0;
+        // ô "đứng": có xe nhưng dòng ra < 30% khả năng chạy tự do (đèn đỏ hoặc đuôi hàng chờ)
+        if (measuring) for (let x = a; x <= b; x++) stopped[x] = n[x] > 0.05 * Math.max(ncrit[x], 0.2) && yflow[x] < 0.3 * n[x] * fr[x] ? 1 : 0;
         for (let x = a; x <= b; x++) {
           let inflow = x === a ? inflowFirst[i] : yflow[x - 1];
           if (x === sm[i]) { if (x > a) inflow *= (1 - sinkF[i]); inflow += srcInj[i]; }
-          const wasQ = n[x] > 1.5 * ncrit[x];
+          // số lần dừng: xe đang chạy nhập vào ô đứng (gia nhập hàng chờ / gặp đèn đỏ)
+          if (measuring && inflow > 0 && stopped[x] && (x === a || !stopped[x - 1])) { K.stops[i] += inflow; acc.stops += inflow; }
           n[x] += inflow - yflow[x];
           if (n[x] < 0) n[x] = 0;
-          if (measuring) {
-            if (x > a && inflow > 0 && !(n[x - 1] > 1.5 * ncrit[x - 1]) && wasQ) K.stops[i] += inflow;
-            else if (x === a && inflow > 0 && wasQ) K.stops[i] += inflow;
-          }
           occ += n[x]; cap += Nmax[x];
         }
         occArr[i] = cap > 0 ? occ / cap : 0;
@@ -300,8 +300,8 @@
         let veh = 0; for (let x = 0; x < NC; x++) veh += n[x];
         let bufT = 0; for (let i = 0; i < NL; i++) bufT += buf[i];
         let sp = 0; for (let i = 0; i < NL; i++) sp += spillNow[i];
-        series.push({ t, veh, buf: bufT, speed: acc.vht > 0 ? acc.vkt / acc.vht * 3.6 : 0, thr: acc.exits / span * 3600, inr: acc.entries / span * 3600, spill: sp });
-        acc = { vht: 0, vkt: 0, exits: 0, entries: 0, t0: t };
+        series.push({ t, veh, buf: bufT, speed: acc.vht > 0 ? acc.vkt / acc.vht * 3.6 : 0, thr: acc.exits / span * 3600, inr: acc.entries / span * 3600, stopRate: acc.arr > 0 ? acc.stops / acc.arr : 0, spill: sp });
+        acc = { vht: 0, vkt: 0, exits: 0, entries: 0, stops: 0, arr: 0, t0: t };
       }
     }
 
@@ -340,6 +340,24 @@
       stopRecording() { recorders.length = 0; },
       /* Kết quả tổng hợp sau thời gian đo. */
       vehNow,
+      /* Chỉ số đánh giá toàn mạng tại thời điểm hiện tại (luỹ kế từ đầu kỳ đo). */
+      netMetrics() {
+        let arr = 0, stops = 0, delay = 0, vkt = 0, queued = 0, qmaxM = 0, qmaxI = -1, spill = 0, onroad = 0;
+        const linkDelay = new Float64Array(NL);
+        for (let i = 0; i < NL; i++) {
+          arr += K.inNode[i] + K.src[i]; stops += K.stops[i];
+          const d = Math.max(0, K.vht[i] - K.vkt[i] / links[i].vms);
+          linkDelay[i] = d; delay += d; vkt += K.vkt[i];
+          const a = c0[i], b = a + nc[i] - 1;
+          let qm = 0;
+          for (let x = b; x >= a; x--) { if (n[x] > 1.5 * ncrit[x]) { queued += n[x]; qm += cellLen[i]; } else break; }
+          for (let x = a; x <= b; x++) onroad += n[x];
+          if (qm > qmaxM) { qmaxM = qm; qmaxI = i; }
+          spill += spillNow[i];
+        }
+        let bufNow = 0; for (let i = 0; i < NL; i++) bufNow += buf[i];
+        return { t, span: Math.max(1, t - c.warmup), entries: K.entries, exits: K.exits, onroad, bufNow, arr, stops, delay: delay + K.bufWait, vkt, queued, qmaxM, qmaxI, spill, linkDelay };
+      },
       /* Cân bằng xe của một vùng (tập nút): vào qua biên + phát sinh bên trong, ra qua biên + kết thúc chuyến bên trong. */
       zoneBalance(nodeSet) {
         let inB = 0, outB = 0, src = 0, sink = 0, inside = 0;
@@ -372,6 +390,7 @@
           avgSpeed: vht > 0 ? vkt / vht * 3.6 : 0,
           delayPerVehKm: vkt > 0 ? delayTot / (vkt / 1000) : 0,   // s/pcu·km
           stopsPerVehKm: vkt > 0 ? stops / (vkt / 1000) : 0,
+          stopRatio: (() => { let a = 0; for (let i = 0; i < NL; i++) a += K.inNode[i] + K.src[i]; return a > 0 ? stops / a : 0; })(),
           throughput: served / span * 3600, entries: K.entries, exits: K.exits,
           accum: vehStart === null ? 0 : vehNow() - vehStart,          // xe tích luỹ thêm trong mạng trong kỳ đo
           bufEnd: U.sum(Array.from(buf)),                              // xe đang chờ vào mạng cuối kỳ
