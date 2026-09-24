@@ -697,8 +697,9 @@
         ${pf('spillThreshold', 'Ngưỡng tràn ngược')}${pf('vDefault', 'v mặc định (km/h)')}
       </div>
       <label class="field" style="margin-top:6px">Nền bản đồ (URL ô XYZ)<select id="tileSel">
-        <option value="https://tile.openstreetmap.org/{z}/{x}/{y}.png">OpenStreetMap</option>
+        <option value="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png">CARTO Voyager (mặc định)</option>
         <option value="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png">CARTO Positron (nhạt)</option>
+        <option value="https://tile.openstreetmap.org/{z}/{x}/{y}.png">OpenStreetMap (chỉ khi chạy qua máy chủ web)</option>
         <option value="custom">Máy chủ GIS nội bộ (tự nhập)…</option></select></label>
       <h3>Khung giờ</h3>
       <div id="bandList">${p.bands.map((b, i) => `<div class="row"><input class="inp mono" value="${esc(b.id)}" style="width:70px" disabled><input class="inp" data-bl="${i}" value="${esc(b.label)}" style="flex:1"></div>`).join('')}</div>
@@ -716,8 +717,7 @@
     ts.onchange = () => {
       let url = ts.value;
       if (url === 'custom') { url = prompt('URL mẫu ô bản đồ, ví dụ https://gis.local/tiles/{z}/{x}/{y}.png', P.tileUrl); if (!url) return; }
-      P.tileUrl = url; view.tileUrl = url; autosave(); view.redraw();
-      $('attrib').textContent = url.includes('openstreetmap') ? '© OpenStreetMap contributors' : url.includes('carto') ? '© OpenStreetMap contributors © CARTO' : 'Nền bản đồ nội bộ';
+      P.tileUrl = url; setTiles(url); autosave();
     };
     $('pane-data').querySelectorAll('[data-bl]').forEach(inp => inp.onchange = () => { p.bands[+inp.dataset.bl].label = inp.value; fillBands(); autosave(); });
     $('bandAdd').onclick = () => {
@@ -1265,7 +1265,8 @@
   }
   function bindMenu(btnId, handler) {
     const btn = $(btnId), list = btn.nextElementSibling;
-    btn.onclick = (e) => { e.stopPropagation(); document.querySelectorAll('.menu-list').forEach(m => { if (m !== list) m.hidden = true; }); list.hidden = !list.hidden; };
+    btn.onclick = (e) => { e.stopPropagation(); document.querySelectorAll('.menu-list').forEach(m => { if (m !== list) m.hidden = true; }); list.hidden = !list.hidden;
+      if (!list.hidden) { const r = btn.getBoundingClientRect(); list.style.top = (r.bottom + 4) + 'px'; list.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; list.style.left = 'auto'; } };
     list.querySelectorAll('button').forEach(b => b.onclick = () => { list.hidden = true; handler(b.dataset.act); });
   }
   document.addEventListener('click', () => document.querySelectorAll('.menu-list').forEach(m => { m.hidden = true; }));
@@ -1337,6 +1338,10 @@
   $('theme').onclick = () => { theme = THEMES[(THEMES.indexOf(theme) + 1) % 3]; try { localStorage.setItem('tso.theme', theme); } catch { /* bỏ qua */ } applyTheme(); };
 
   function fitAll() { view.fit(S.project.nodes.map(n => [n.lon, n.lat]), 40); }
+  function setTiles(url) {
+    view.tileUrl = url; view.redraw();
+    $('attrib').textContent = /openstreetmap/.test(url) ? '© OpenStreetMap contributors' : /carto/.test(url) ? '© OpenStreetMap contributors © CARTO' : 'Nền bản đồ nội bộ';
+  }
   function renderAll() {
     $('pname').value = S.project.name;
     renderData(); renderOpt(); renderSim(); renderRep(); renderInspector(); legend(); drawDock(); view.redraw();
@@ -1348,7 +1353,9 @@
     S.sel = null; S.tsd = null; S.chain = []; S.ab = null; S.zoneColor = null;
     S.scenario = S.project.nodes.some(n => n.opt && n.opt[S.band]) && S.project.results && S.project.results[S.band] ? 'opt' : 'base';
     setScenarioButtons();
-    view.tileUrl = S.project.params.tileUrl;
+    // OSM chặn ô bản đồ khi mở file:// (không có Referer) → tự chuyển sang CARTO
+    if (/tile\.openstreetmap\.org/.test(S.project.params.tileUrl) && location.protocol === 'file:') S.project.params.tileUrl = M.DEFAULT_PARAMS.tileUrl;
+    setTiles(S.project.params.tileUrl);
     invalidate(true); fillBands(); updateChainInfo(); setTool('sel');
     if (fit) fitAll();
     renderAll();

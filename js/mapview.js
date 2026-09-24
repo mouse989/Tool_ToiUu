@@ -57,7 +57,6 @@
         let img = cache.get(key);
         if (!img) {
           img = new Image();
-          img.crossOrigin = 'anonymous';
           img.onload = () => view.redraw();
           img.onerror = () => { img.failed = true; };
           img.src = view.tileUrl.replace('{z}', zt).replace('{x}', xw).replace('{y}', ty).replace('{s}', 'abc'[(xw + ty) % 3]);

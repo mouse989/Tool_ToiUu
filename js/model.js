@@ -38,7 +38,7 @@
     couplingHigh: 1.6, couplingLow: 0.9, // chỉ số ghép nối q_2chiều(pcu/h)/L(m): ≥ cao → phối hợp; < thấp → độc lập
     vDefault: 30,         // km/h khi thiếu số liệu vận tốc
     pcu: { xe_may: 0.3, o_to: 1.0, xe_tai: 2.0, xe_buyt: 2.5 },
-    tileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    tileUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', // CARTO Voyager: chạy được cả khi mở file:// (OSM chặn yêu cầu không có Referer)
   };
 
   M.newProject = function (name) {

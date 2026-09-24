@@ -4,7 +4,7 @@
 Phần mềm là ứng dụng web tĩnh, không cần cài đặt hay cơ sở dữ liệu.
 
 - **Windows**: nhấp đúp `chay_ung_dung.bat`. Tệp này mở máy chủ web cục bộ bằng Python hoặc Node, rồi mở trình duyệt tại `http://localhost:8080`.
-- **Cách khác**: mở thẳng `index.html` bằng Chrome/Edge. Mọi chức năng tính toán vẫn chạy; riêng nền bản đồ OSM có thể bị từ chối khi mở kiểu `file://`, lúc đó chọn nền CARTO hoặc máy chủ GIS nội bộ ở tab Dữ liệu.
+- **Cách khác**: mở thẳng `index.html` bằng Chrome/Edge. Nền bản đồ mặc định là **CARTO Voyager** (dữ liệu OpenStreetMap), chạy được cả khi mở kiểu `file://`. Máy chủ ô của OpenStreetMap chặn yêu cầu không có Referer (hiện ô "403 Access blocked"), nên chỉ chọn nền OSM khi chạy qua máy chủ web; nếu đang mở `file://` phần mềm tự chuyển sang CARTO. Có thể khai báo máy chủ GIS nội bộ ở tab Dữ liệu.
 - **Máy không có Internet**: bỏ chọn "Nền bản đồ"; mạng lưới vẫn hiển thị theo toạ độ.
 
 Lần đầu mở, phần mềm nạp **mạng mẫu 500 nút giả lập** để chạy thử. Dự án đang làm được tự lưu trong trình duyệt.
