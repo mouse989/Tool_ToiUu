@@ -66,6 +66,18 @@ Lần đầu mở, phần mềm nạp **mạng mẫu 500 nút giả lập** đ�
 - Nút "**Gán pha theo trục**" trong cột phải làm lại việc nhóm pha cho nút đang chọn.
 - Nút **không có đèn** được mô phỏng như nút ưu tiên: xe qua theo năng lực nhánh.
 
+### Chỉnh hình dạng nhánh (đường cong, quẹo)
+- Bấm **〰 Sửa nhánh** rồi nhấp chọn một nhánh. Hoặc chọn nhánh bằng công cụ Chọn, rồi bấm "〰 Sửa hình dạng" ở cột phải.
+- Trên nhánh hiện các loại điểm:
+  - **điểm cam** là điểm uốn: kéo để di chuyển;
+  - **⊕ giữa mỗi đoạn**: kéo để **thêm điểm uốn mới**;
+  - **nhấp phải hoặc nhấp đúp** vào điểm cam để xoá;
+  - hai điểm đầu mút màu xám gắn với nút giao; di chuyển nút bằng công cụ Di chuyển.
+- Mặc định **sửa đồng thời chiều ngược** của cùng tuyến. Bỏ chọn ô này ở cột phải nếu hai chiều đi hai tuyến khác nhau, ví dụ đường đôi tách xa.
+- Sau khi sửa, **chiều dài nhánh tính lại theo hình dạng mới**, kéo theo thời gian hành trình, sóng xanh, số ô mô phỏng CTM. Nếu nhánh đang dùng chiều dài nhập tay L, bấm "Dùng chiều dài hình học" để chuyển sang chiều dài đo theo hình dạng.
+- Các nút khác ở cột phải: **Làm thẳng** (xoá mọi điểm uốn), **Chép sang chiều ngược**.
+- Hướng tiếp cận của nhánh (Bắc/Nam/Đông/Tây, nhóm pha theo trục, nhận biết đi thẳng hay rẽ) được tính theo **đoạn cuối** của hình dạng, nên nhánh cong vào nút theo hướng nào thì được nhận đúng hướng đó.
+
 ## 4. Chạy tối ưu
 Thẻ **Tối ưu**:
 1. Kiểm tra thiết lập: chu kỳ tối thiểu/tối đa, phạt dừng K, kích thước vùng, ngưỡng GWS, lưu lượng tối thiểu để xét sóng xanh.

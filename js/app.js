@@ -10,7 +10,7 @@
   const S = {
     project: null, band: null, scenario: 'base',
     net: null, netKey: '', ana: null, geo: null,
-    sel: null, chain: [], poly: [], polyDone: false, tool: 'sel', pendingLinkFrom: null,
+    sel: null, chain: [], poly: [], polyDone: false, shapeRef: null, shapeMirror: true, tool: 'sel', pendingLinkFrom: null,
     colorBy: 'vc', tsd: null, dock: 'tsd', dockMin: false,
     sim: null, simGeo: null, playing: false, simSpeed: 20, simScenario: 'opt-rec', rec: null,
     ab: null, seriesMetric: 'bal', optRunning: false, zoneColor: null, hover: null,
@@ -268,7 +268,73 @@
       ctx.font = '11px ' + css('--font'); ctx.fillStyle = css('--ink'); ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
       for (let n = 0; n < S.project.nodes.length; n++) { const p = view.toScreen(...geo.nodes[n]); if (inView(p)) ctx.fillText(S.project.nodes[n].id, p[0] + r + 3, p[1] - 2); }
     }
+    // chỉnh hình dạng nhánh: điểm đỉnh (kéo / nhấp phải để xoá) và điểm giữa (kéo để thêm điểm)
+    if (S.tool === 'shape' && S.shapeRef) {
+      const h = shapeHandles();
+      ctx.save();
+      ctx.strokeStyle = css('--s2'); ctx.lineWidth = 3; ctx.setLineDash([]);
+      ctx.beginPath(); h.pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+      ctx.lineWidth = 1.5;
+      for (const g of h.ghosts) { ctx.fillStyle = css('--surface'); ctx.strokeStyle = css('--s2'); ctx.beginPath(); ctx.arc(g.x, g.y, 4.5, 0, 7); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(g.x - 2.5, g.y); ctx.lineTo(g.x + 2.5, g.y); ctx.moveTo(g.x, g.y - 2.5); ctx.lineTo(g.x, g.y + 2.5); ctx.stroke(); }
+      h.pts.forEach((q, k) => {
+        const end = k === 0 || k === h.pts.length - 1;
+        ctx.fillStyle = end ? css('--ink-2') : css('--s2'); ctx.strokeStyle = css('--surface');
+        ctx.beginPath(); ctx.arc(q[0], q[1], end ? 4 : 6, 0, 7); ctx.fill(); ctx.stroke();
+      });
+      ctx.restore();
+    }
   };
+
+  /* ── Chỉnh hình dạng nhánh (thêm / kéo / xoá điểm) ── */
+  function ensureGeom(ref) {
+    if (!ref.geom || ref.geom.length < 2) { const u = nodeById(ref.u), v = nodeById(ref.v); ref.geom = [[u.lon, u.lat], [v.lon, v.lat]]; }
+    return ref.geom;
+  }
+  function shapeHandles() {
+    const geom = ensureGeom(S.shapeRef);
+    const pts = geom.map(q => view.lonlatToScreen(q[0], q[1]));
+    const ghosts = [];
+    for (let k = 1; k < pts.length; k++) ghosts.push({ k, x: (pts[k - 1][0] + pts[k][0]) / 2, y: (pts[k - 1][1] + pts[k][1]) / 2 });
+    return { pts, ghosts };
+  }
+  function reverseOf(ref) { return S.project.links.find(l => l.u === ref.v && l.v === ref.u); }
+  function shapeChanged(done) {
+    const ref = S.shapeRef;
+    ref.L = null;
+    if (S.shapeMirror) { const r = reverseOf(ref); if (r) { r.geom = ref.geom.slice().reverse().map(q => q.slice()); r.L = null; } }
+    S.geo = null; S.net = null; rev++;
+    if (done) { invalidate(true); renderInspector(); }
+    view.redraw();
+  }
+  function shapeVertexAt(px, py) {
+    if (!S.shapeRef) return -1;
+    const h = shapeHandles();
+    for (let k = 1; k < h.pts.length - 1; k++) if (Math.hypot(h.pts[k][0] - px, h.pts[k][1] - py) < 9) return k;
+    return -1;
+  }
+  function deleteShapeVertex(k) {
+    S.shapeRef.geom.splice(k, 1); shapeChanged(true);
+    toast('Đã xoá điểm. Chiều dài nhánh tính lại theo hình dạng mới.');
+  }
+  function selectShapeLink(i) {
+    const net = getNet();
+    S.shapeRef = net.links[i].ref; ensureGeom(S.shapeRef);
+    select({ type: 'link', i });
+  }
+  $('map').addEventListener('contextmenu', (e) => {
+    if (S.tool !== 'shape') return;
+    e.preventDefault();
+    const r = $('map').getBoundingClientRect();
+    const k = shapeVertexAt(e.clientX - r.left, e.clientY - r.top);
+    if (k > 0) deleteShapeVertex(k);
+  });
+  $('map').addEventListener('dblclick', (e) => {
+    if (S.tool !== 'shape') return;
+    const r = $('map').getBoundingClientRect();
+    const k = shapeVertexAt(e.clientX - r.left, e.clientY - r.top);
+    if (k > 0) deleteShapeVertex(k);
+  });
 
   function drawZones(ctx) {
     const zc = zoneColors(), r = result(), geo = getGeo();
@@ -391,6 +457,11 @@
       S.poly.push([lon, lat]); updatePolyInfo(); view.redraw();
       return;
     }
+    if (S.tool === 'shape') {
+      if (hit && hit.type === 'link') selectShapeLink(hit.i);
+      else if (!hit) { S.shapeRef = null; select(null); }
+      return;
+    }
     if (S.tool === 'sig') {
       if (!hit || hit.type !== 'node') { toast('Nhấp vào một nút giao để gắn / gỡ đèn'); return; }
       toggleSignal(hit.n);
@@ -440,6 +511,21 @@
     tip.style.left = Math.min(px + 14, view.w - 300) + 'px'; tip.style.top = Math.min(py + 14, view.h - 80) + 'px';
   };
   view.dragHook = function (px, py) {
+    if (S.tool === 'shape' && S.shapeRef) {
+      const h = shapeHandles();
+      let k = shapeVertexAt(px, py);
+      if (k < 0) {
+        const g = h.ghosts.find(q => Math.hypot(q.x - px, q.y - py) < 9);
+        if (!g) return null;
+        const [lon, lat] = U.unproject(...view.toMerc(px, py));
+        S.shapeRef.geom.splice(g.k, 0, [U.round(lon, 6), U.round(lat, 6)]);
+        k = g.k;
+      }
+      return {
+        move(x, y) { const [lon, lat] = U.unproject(...view.toMerc(x, y)); S.shapeRef.geom[k] = [U.round(lon, 6), U.round(lat, 6)]; shapeChanged(false); },
+        end() { shapeChanged(true); },
+      };
+    }
     if (S.tool !== 'move') return null;
     const hit = hitTest(px, py);
     if (!hit || hit.type !== 'node') return null;
@@ -765,6 +851,10 @@
         <h3>Lưu lượng & vận tốc theo khung giờ</h3>
         <table class="ph-table"><thead><tr><th style="text-align:left">Khung giờ</th><th>q pcu/h</th><th>v km/h</th><th></th></tr></thead><tbody>${rows}</tbody></table>
         <p class="note">Tỷ lệ rẽ ước lượng (Furness): ${l.turn.map(t => `${esc(net.nodes[net.links[t.j].v].id)} ${(t.p * (1 - l.exitFrac) * 100).toFixed(0)}%`).join(' · ') || '—'}${l.exitFrac > 0.01 ? ` · ra khỏi mạng ${(l.exitFrac * 100).toFixed(0)}%` : ''}</p>
+        <h3>Hình dạng tuyến</h3>
+        <p class="note">${(ref.geom ? ref.geom.length : 2)} điểm (kể cả 2 đầu) · dài theo hình học <b>${Math.round(U.polylineLength(ref.geom && ref.geom.length >= 2 ? ref.geom : [[net.nodes[l.u].lon, net.nodes[l.u].lat], [net.nodes[l.v].lon, net.nodes[l.v].lat]]))} m</b>${ref.L ? ` · đang dùng L nhập tay ${Math.round(ref.L)} m` : ''}</p>
+        <label class="chk"><input type="checkbox" id="shMirror" ${S.shapeMirror ? 'checked' : ''}> Sửa đồng thời chiều ngược (${reverseOf(ref) ? 'có' : 'không có'} nhánh ngược)</label>
+        <div class="row"><button class="btn sm" data-act="shape">〰 Sửa hình dạng</button><button class="btn sm" data-act="straight">Làm thẳng</button>${reverseOf(ref) ? '<button class="btn sm" data-act="copyrev">Chép sang chiều ngược</button>' : ''}${ref.L ? '<button class="btn sm" data-act="useGeomL">Dùng chiều dài hình học</button>' : ''}</div>
         <div class="row"><button class="btn sm danger" data-act="dellink">Xoá nhánh</button></div>`;
       bindInspectorLink(ref);
     } else if (sel.type === 'zone') {
@@ -892,6 +982,12 @@
         invalidate(); renderInspector(); view.redraw();
       };
     });
+    if ($('shMirror')) $('shMirror').onchange = (e) => { S.shapeMirror = e.target.checked; };
+    const act = (a, fn) => { const b = el.querySelector(`[data-act="${a}"]`); if (b) b.onclick = fn; };
+    act('shape', () => { const i = getNet().links.findIndex(x => x.ref === ref); setTool('shape'); if (i >= 0) selectShapeLink(i); });
+    act('straight', () => { const g = ensureGeom(ref); S.shapeRef = ref; ref.geom = [g[0], g[g.length - 1]]; shapeChanged(true); toast('Đã làm thẳng nhánh'); });
+    act('copyrev', () => { const r = reverseOf(ref); r.geom = ensureGeom(ref).slice().reverse().map(q => q.slice()); r.L = null; invalidate(true); view.redraw(); toast('Đã chép hình dạng sang chiều ngược'); });
+    act('useGeomL', () => { ref.L = null; invalidate(true); renderInspector(); view.redraw(); });
     const del = el.querySelector('[data-act="dellink"]');
     if (del) del.onclick = () => { S.project.links.splice(S.project.links.indexOf(ref), 1); S.sel = null; invalidate(true); renderInspector(); view.redraw(); };
   }
@@ -1584,16 +1680,18 @@
   };
   function setTool(t) {
     S.tool = t; S.pendingLinkFrom = null;
-    const map = { sel: 'tSel', addN: 'tAddN', addL: 'tAddL', move: 'tMove', sig: 'tSig', poly: 'tPoly' };
+    const map = { sel: 'tSel', addN: 'tAddN', addL: 'tAddL', move: 'tMove', shape: 'tShape', sig: 'tSig', poly: 'tPoly' };
     for (const [k, id] of Object.entries(map)) $(id).setAttribute('aria-pressed', k === t);
     $('mapwrap').classList.toggle('edit-add', t === 'addN' || t === 'addL' || t === 'poly' || t === 'sig');
     updatePolyInfo();
     if (t === 'poly') toast('Nhấp các đỉnh của vùng cần lấy dữ liệu OSM, sau đó bấm "Tải mạng OSM…"');
+    if (t === 'shape') { toast('Nhấp chọn một nhánh → kéo điểm ⊕ giữa đoạn để thêm điểm uốn, kéo điểm cam để di chuyển, nhấp phải / nhấp đúp để xoá điểm.'); if (S.sel && S.sel.type === 'link') selectShapeLink(S.sel.i); }
+    else S.shapeRef = null;
     if (t === 'sig') toast('Nhấp vào nút giao để gắn / gỡ đèn. Nhánh vào được tô màu theo pha phục vụ.');
     view.redraw();
   }
   $('tSel').onclick = () => setTool('sel'); $('tAddN').onclick = () => setTool('addN'); $('tAddL').onclick = () => setTool('addL'); $('tMove').onclick = () => setTool('move');
-  $('tSig').onclick = () => setTool('sig'); $('tPoly').onclick = () => setTool('poly');
+  $('tSig').onclick = () => setTool('sig'); $('tShape').onclick = () => setTool('shape'); $('tPoly').onclick = () => setTool('poly');
   document.querySelectorAll('.left .tabs [data-tab]').forEach(b => b.onclick = () => {
     document.querySelectorAll('.left .tabs [data-tab]').forEach(x => x.setAttribute('aria-selected', x === b));
     for (const k of ['data', 'opt', 'sim', 'rep']) $('pane-' + k).hidden = k !== b.dataset.tab;
