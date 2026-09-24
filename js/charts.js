@@ -203,7 +203,7 @@
         const r = canvas.getBoundingClientRect(); const px = e.clientX - r.left;
         const dt = (px - drag.x) / (w - m.l - m.r) * (T1 - T0);
         const pl = cfg.planFn(corr.seq[drag.k]);
-        cfg.onDragOffset(drag.k, Math.round(U.mod(drag.off + dt, M.cycleOf(pl))), false);
+        cfg.onDragOffset(drag.k, Math.round(U.mod(drag.off + dt, M.cycleOf(pl))) % M.cycleOf(pl), false);
       };
       canvas.onpointerup = () => { if (drag) { cfg.onDragOffset(drag.k, cfg.planFn(corr.seq[drag.k]).offset, true); } drag = null; canvas.style.cursor = ''; };
     } else { canvas.onpointerdown = canvas.onpointermove = canvas.onpointerup = null; }

@@ -1010,11 +1010,14 @@
       <div class="row"><label class="field" style="flex:1">Nhân lưu lượng q ×<input type="number" id="kQ" value="1.1" step="0.05"></label><button class="btn" id="dMulQ" style="align-self:flex-end">Áp dụng</button></div>
       <div class="row"><label class="field" style="flex:1">Nhân suất dòng bão hoà S ×<input type="number" id="kS" value="1.1" step="0.05"></label><button class="btn" id="dMulS" style="align-self:flex-end">Áp dụng</button></div>
       <p class="note">Dùng để hiệu chỉnh mô hình theo quan sát hiện trường (khoảng xả hàng chờ đo từ camera) hoặc thử kịch bản tăng trưởng nhu cầu.</p>
+      <h3>Đèn tín hiệu mặc định</h3>
+      <div class="grid2">${pf('yellow', 'Vàng (s)')}${pf('allRed', 'Đỏ toàn phần (s)')}${pf('minGreen', 'Xanh tối thiểu (s)')}${pf('maxGreen', 'Xanh tối đa (s)')}</div>
+      <div class="row"><button class="btn" id="dSigDef" title="Ghi vàng, đỏ toàn phần, xanh min/max mặc định vào mọi pha của mọi nút có đèn (hiện trạng, mọi khung giờ)">Áp cho mọi nút có đèn</button>
+      <button class="btn" id="dSigWeb" title="Dùng khi chưa có giản đồ thực tế của tủ (ví dụ mạng lấy từ OSM): tính chu kỳ & thời lượng xanh ban đầu theo Webster từ lưu lượng">Khởi tạo giản đồ theo lưu lượng</button></div>
+      <p class="note">Quy trình khi chưa có số liệu tủ: dựng mạng (OSM) → nhập lưu lượng → đánh dấu nút có đèn → đặt vàng/đỏ mặc định → <b>Tối ưu</b> (hệ thống tự tính chu kỳ, split, offset). Đối chiếu vàng/đỏ với QCVN 41:2024/BGTVT và thiết kế nút.</p>
       <h3>Tham số kỹ thuật</h3>
       <div class="grid2">
         ${pf('satPerLane', 'S cơ sở (pcu/h/làn)')}${pf('jamSpacing', 'Cự ly kẹt (m/pcu/làn)')}
-        ${pf('minGreen', 'Xanh tối thiểu (s)')}${pf('maxGreen', 'Xanh tối đa (s)')}
-        ${pf('yellow', 'Vàng mặc định (s)')}${pf('allRed', 'Đỏ toàn phần (s)')}
         ${pf('lostStart', 'Mất mát khởi động l₁ (s)')}${pf('greenExt', 'Tận dụng vàng e (s)')}
         ${pf('alpha', 'Phân tán Robertson α')}${pf('beta', 'Phân tán Robertson β')}
         ${pf('spillThreshold', 'Ngưỡng tràn ngược')}${pf('vDefault', 'v mặc định (km/h)')}
@@ -1044,6 +1047,19 @@
       P.tileUrl = url; setTiles(url); autosave();
     };
     $('pane-data').querySelectorAll('[data-bl]').forEach(inp => inp.onchange = () => { p.bands[+inp.dataset.bl].label = inp.value; fillBands(); autosave(); });
+    $('dSigDef').onclick = () => {
+      let n = 0;
+      for (const nd of p.nodes) if (nd.signalized) for (const b of p.bands) { const pl = nd.plans[b.id]; if (!pl) continue; for (const ph of pl.phases) { ph.y = P.yellow; ph.ar = P.allRed; ph.minG = P.minGreen; ph.maxG = P.maxGreen; if (ph.g < P.minGreen) ph.g = P.minGreen; } n++; }
+      invalidate(); renderInspector(); view.redraw();
+      toast(`Đã áp vàng ${P.yellow}s, đỏ toàn phần ${P.allRed}s, xanh min ${P.minGreen}s cho ${n} giản đồ (mọi nút có đèn × khung giờ)`);
+    };
+    $('dSigWeb').onclick = () => {
+      if (!confirm('Tính lại giản đồ HIỆN TRẠNG (mọi khung giờ) của mọi nút có đèn theo Webster từ lưu lượng? Giản đồ hiện có sẽ bị thay thế.')) return;
+      let n = 0;
+      for (const b of p.bands) { const net = M.buildNet(p, b.id); for (let i = 0; i < net.N; i++) { const nd = net.nodes[i]; if (!nd.signalized || !net.inL[i].length) continue; const r = SG.optimizeNode(net, i, nd.plans[b.id]); r.plan.offset = 0; nd.plans[b.id] = r.plan; n++; } }
+      invalidate(); renderInspector(); view.redraw();
+      toast(`Đã khởi tạo ${n} giản đồ theo Webster. Chạy Tối ưu để phối hợp vùng, sóng xanh và offset.`);
+    };
     $('bandAdd').onclick = () => {
       const id = prompt('Mã khung giờ mới (không dấu, ví dụ: sat_am):'); if (!id) return;
       const key = U.normKey(id); if (p.bands.find(b => b.id === key)) { toast('Mã đã tồn tại', true); return; }
@@ -1163,7 +1179,9 @@
           <tr><td>Vận tốc TB (km/h)</td><td>${r.ctm.fixed.avgSpeed.toFixed(1)}</td><td>${r.ctm.adaptive ? r.ctm.adaptive.avgSpeed.toFixed(1) : '—'}</td></tr>
           <tr><td>Tràn ngược (nhánh·phút)</td><td>${r.ctm.fixed.spillLinkMin.toFixed(0)}</td><td>${r.ctm.adaptive ? r.ctm.adaptive.spillLinkMin.toFixed(0) : '—'}</td></tr></tbody></table>` : ''}`;
     } else h += `<p class="note" style="margin-top:14px">Chưa có kết quả cho khung giờ này. Bộ tối ưu gồm: Webster → nhận diện hành lang → phân vùng Louvain → quét chu kỳ vùng (TRANSYT PI) → MAXBAND sóng xanh → leo đồi offset/split → kiểm chứng CTM → khuyến nghị.</p>`;
+    h += aiSectionHtml();
     $('pane-opt').innerHTML = h;
+    bindAiSection();
     const q = (id) => $(id);
     $('pane-opt').querySelectorAll('[data-pf]').forEach(inp => inp.onchange = () => { P[inp.dataset.pf] = U.num(inp.value, P[inp.dataset.pf]); autosave(); });
     q('oHalf').onchange = (e) => { optOpts.halfCycle = e.target.checked; };
@@ -1184,6 +1202,88 @@
       $('pane-opt').querySelectorAll('tr[data-c]').forEach(tr => tr.onclick = () => openResultCorridor(+tr.dataset.c));
       $('pane-opt').querySelectorAll('[data-rc]').forEach(dv => dv.onclick = () => { const [road, zone] = dv.dataset.rc.split('|'); const i = r.corridors.findIndex(c => (c.road || '') === road && c.zone === +zone); if (i >= 0) openResultCorridor(i); });
     }
+  }
+
+  /* ── Tối ưu nâng cao: chạy thử – hiệu chỉnh lặp (SPSA / cố vấn LLM) ── */
+  const aiOpts = { method: 'spsa', iters: 30, rounds: 3, scope: 'all', minutes: 15, model: 'claude-opus-5', remember: false };
+  const AIS = { running: false, stop: false, trace: null, log: [], res: null, msg: '' };
+  function aiKey() { try { return localStorage.getItem('tso.anthropicKey') || ''; } catch { return ''; } }
+  function aiSectionHtml() {
+    const hasOpt = S.project.nodes.some(n => n.opt && n.opt[S.band]);
+    const r = AIS.res;
+    return `<h3 style="margin-top:18px">Tối ưu nâng cao · chạy thử & hiệu chỉnh lặp (AI)</h3>
+      <p class="note">Mô phỏng CTM làm thước đo; hệ thống lặp: đề xuất điều chỉnh → chạy thử → giữ nếu tốt hơn. Nên chạy sau bước Tối ưu ở trên${hasOpt ? '' : ' (hiện chưa có đề xuất — sẽ xuất phát từ hiện trạng)'}.</p>
+      <label class="field">Phương pháp<select id="aiM">
+        <option value="spsa" ${aiOpts.method === 'spsa' ? 'selected' : ''}>SPSA — tự hiệu chỉnh offset & xanh bằng chạy thử (không cần Internet)</option>
+        <option value="llm" ${aiOpts.method === 'llm' ? 'selected' : ''}>Cố vấn AI (Claude) — đề xuất có lý do, mô phỏng kiểm chứng</option></select></label>
+      <div class="grid2" style="margin-top:6px">
+        <label class="field" ${aiOpts.method === 'llm' ? 'hidden' : ''}>Số vòng lặp<input type="number" id="aiIt" value="${aiOpts.iters}"></label>
+        <label class="field" ${aiOpts.method === 'spsa' ? 'hidden' : ''}>Số vòng hỏi AI<input type="number" id="aiRd" value="${aiOpts.rounds}"></label>
+        <label class="field">Phạm vi<select id="aiSc"><option value="all" ${aiOpts.scope === 'all' ? 'selected' : ''}>Mọi nút có đèn</option><option value="worst" ${aiOpts.scope === 'worst' ? 'selected' : ''}>25% nút kém nhất + lân cận</option><option value="worst10" ${aiOpts.scope === 'worst10' ? 'selected' : ''}>10% nút kém nhất + lân cận</option></select></label>
+        <label class="field">Thời lượng mỗi lần chạy thử (phút)<input type="number" id="aiMin" value="${aiOpts.minutes}"></label>
+      </div>
+      ${aiOpts.method === 'llm' ? `<div class="grid2" style="margin-top:6px"><label class="field">Khoá API Anthropic<input type="password" id="aiKey" value="${esc(aiKey())}" placeholder="sk-ant-…"></label>
+        <label class="field">Mô hình<input id="aiModel" value="${esc(aiOpts.model)}"></label></div>
+        <label class="chk"><input type="checkbox" id="aiRem" ${aiKey() ? 'checked' : ''}> Ghi nhớ khoá trên máy này (localStorage; không lưu vào file dự án)</label>
+        <p class="note">Dữ liệu gửi đi: chỉ số và giản đồ của các nút kém nhất (mã nút, tên đường, lưu lượng, thời gian pha). Không gửi toạ độ. Chi phí tính theo token của tài khoản Anthropic.</p>` : ''}
+      <div class="row"><button class="btn accent" id="aiRun" ${AIS.running || S.optRunning ? 'disabled' : ''}>${AIS.running ? 'Đang chạy…' : 'Chạy tối ưu lặp'}</button><button class="btn" id="aiStop" ${AIS.running ? '' : 'disabled'}>Dừng</button></div>
+      <div class="note" id="aiMsg">${esc(AIS.msg)}</div>
+      <canvas id="aiChart" style="width:100%;height:150px;display:${AIS.trace && AIS.trace.length > 1 ? 'block' : 'none'}"></canvas>
+      ${r ? `<table class="cmp"><tbody><tr><td>Mục tiêu J (CTM) ban đầu</td><td>${r.start.toFixed(1)}</td></tr><tr><td>Sau hiệu chỉnh</td><td><b>${r.final.toFixed(1)}</b> <span class="${r.gain > 0 ? 'good' : ''}">${U.pct(-r.gain, 1)}</span></td></tr>
+        ${r.finalRes && r.startRes ? `<tr><td>Tổng trễ (xe·h)</td><td>${r.startRes.delayVehH.toFixed(0)} → ${r.finalRes.delayVehH.toFixed(0)}</td></tr><tr><td>Tỷ lệ dừng</td><td>${Math.round(r.startRes.stopRatio * 100)}% → ${Math.round(r.finalRes.stopRatio * 100)}%</td></tr>` : ''}
+        <tr><td>Thời gian</td><td>${(r.ms / 1000).toFixed(0)} s</td></tr></tbody></table><p class="note">Giản đồ tốt nhất đã ghi vào phương án <b>Đề xuất</b>. J = tổng trễ + K·dừng/3600 + 0,2·tràn ngược (xe·h tương đương).</p>` : ''}
+      ${AIS.log.length ? `<div class="tw" style="max-height:260px">${AIS.log.map(x => x.kind === 'analysis' ? `<div class="rec adapt" style="cursor:default"><div class="t">Vòng ${x.round} · nhận định AI</div>${esc(x.text)}</div>` : x.kind === 'err' ? `<div class="rec none" style="cursor:default">${esc(x.text)}</div>` : `<div class="rec ${x.ok ? 'two' : 'none'}" style="cursor:default"><div class="t">${esc(x.node)} · ${x.type === 'split' ? 'xanh ' + esc(x.value) : 'offset ' + esc(x.value)} <span class="badge ${x.ok ? 'ok' : 'bad'}">${x.ok ? 'nhận' : 'loại'} ΔJ ${x.dJ.toFixed(1)}</span></div>${esc(x.reason)}</div>`).join('')}</div>` : ''}`;
+  }
+  function drawAiChart() {
+    const cv = $('aiChart'); if (!cv || !AIS.trace || AIS.trace.length < 2) return;
+    cv.style.display = 'block';
+    CH().line(cv, { series: [{ label: 'J lần thử', color: css('--s2'), points: AIS.trace.map(t => [t.it, t.J]) }, { label: 'Tốt nhất', color: css('--s1'), points: AIS.trace.map(t => [t.it, t.best]) }], xLabel: 'vòng', yLabel: 'J (xe·h tđ)', xFmt: v => Math.round(v), yFmt: v => (+v).toFixed(0) });
+  }
+  function bindAiSection() {
+    const g = (id) => $(id);
+    if (!g('aiM')) return;
+    g('aiM').onchange = (e) => { aiOpts.method = e.target.value; renderOpt(); };
+    if (g('aiIt')) g('aiIt').onchange = (e) => { aiOpts.iters = Math.max(2, U.num(e.target.value, 30)); };
+    if (g('aiRd')) g('aiRd').onchange = (e) => { aiOpts.rounds = Math.max(1, U.num(e.target.value, 3)); };
+    g('aiSc').onchange = (e) => { aiOpts.scope = e.target.value; };
+    g('aiMin').onchange = (e) => { aiOpts.minutes = Math.max(5, U.num(e.target.value, 15)); };
+    if (g('aiModel')) g('aiModel').onchange = (e) => { aiOpts.model = e.target.value.trim() || 'claude-opus-5'; };
+    g('aiRun').onclick = runAi;
+    g('aiStop').onclick = () => { AIS.stop = true; AIS.msg = 'Đang dừng sau lần chạy thử hiện tại…'; if ($('aiMsg')) $('aiMsg').textContent = AIS.msg; };
+    drawAiChart();
+  }
+  async function runAi() {
+    if (AIS.running) return;
+    const key = $('aiKey') ? $('aiKey').value.trim() : '';
+    if (aiOpts.method === 'llm') {
+      if (!key) { toast('Nhập khoá API Anthropic để dùng cố vấn AI', true); return; }
+      try { if ($('aiRem') && $('aiRem').checked) localStorage.setItem('tso.anthropicKey', key); else localStorage.removeItem('tso.anthropicKey'); } catch { /* bỏ qua */ }
+    }
+    stopSim();
+    Object.assign(AIS, { running: true, stop: false, trace: [], log: [], res: null, msg: 'Đang chạy thử phương án xuất phát…' });
+    renderOpt();
+    const o = { iters: aiOpts.iters, rounds: aiOpts.rounds, scope: aiOpts.scope, warmup: 300, duration: aiOpts.minutes * 60, apiKey: key, model: aiOpts.model };
+    const prog = (info) => {
+      AIS.trace = info.trace; if (info.log) AIS.log = info.log;
+      AIS.msg = info.msg || `Vòng ${info.it}/${info.iters} · J tốt nhất ${info.best.toFixed(1)} (xuất phát ${info.start.toFixed(1)}) · ${info.nNodes} nút, ${info.nVars} biến`;
+      if ($('aiMsg')) $('aiMsg').textContent = AIS.msg;
+      drawAiChart();
+    };
+    try {
+      const res = aiOpts.method === 'spsa'
+        ? await TS.aiopt.runSPSA(S.project, S.band, o, prog, () => AIS.stop)
+        : await TS.aiopt.runLLM(S.project, S.band, o, prog, () => AIS.stop);
+      AIS.res = res; if (res.log) AIS.log = res.log;
+      AIS.msg = `Hoàn tất: J ${res.start.toFixed(1)} → ${res.final.toFixed(1)} (${U.pct(-res.gain, 1)}).`;
+      S.scenario = 'opt'; setScenarioButtons();
+      toast(AIS.msg);
+    } catch (e) {
+      console.error(e);
+      AIS.msg = 'Lỗi: ' + (e && e.message ? e.message : e) + (aiOpts.method === 'llm' ? ' — kiểm tra khoá API, mạng Internet (cdn.jsdelivr.net, api.anthropic.com).' : '');
+      toast(AIS.msg, true);
+    }
+    AIS.running = false;
+    invalidate(); renderOpt(); renderSim(); renderInspector(); legend(); view.redraw();
   }
 
   function focusZone(zid) {

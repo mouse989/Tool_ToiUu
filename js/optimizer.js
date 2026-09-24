@@ -35,7 +35,7 @@
       let feed = null, bd = 1e9;
       for (const i of net.inL[u]) { const d = U.angleDiff(net.links[i].brg, l.brgStart); if (d < bd) { bd = d; feed = net.links[i].phases; } }
       const depart = pu.offset + firstStart(pu, feed || [0]);
-      pv.offset = Math.round(U.mod(depart + l.T - firstStart(pv, l.phases), M.cycleOf(pv)));
+      pv.offset = Math.round(U.mod(depart + l.T - firstStart(pv, l.phases), M.cycleOf(pv))) % M.cycleOf(pv);
     };
     const heapPush = (h, x) => { h.push(x); h.sort((a, b) => b[0] - a[0]); };
     for (const start of [root, ...zoneNodes]) {
@@ -272,7 +272,7 @@
     for (let n = 0; n < N; n++) {
       if (!work[n]) continue;
       const pl = work[n];
-      pl.offset = Math.round(U.mod(pl.offset, M.cycleOf(pl)));
+      pl.offset = Math.round(U.mod(pl.offset, M.cycleOf(pl))) % M.cycleOf(pl);
       net.nodes[n].opt[band] = pl;
     }
     let evOpt = PR.evaluateScenario(net, 'opt');

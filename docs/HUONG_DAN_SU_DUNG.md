@@ -95,6 +95,18 @@ Thẻ **Tối ưu**:
 
 Hành lang tự chọn: giữ **Ctrl** và nhấp lần lượt các nút liên tiếp → **Vẽ TSD** hoặc **Lưu làm hành lang**. Hành lang đã lưu được bộ tối ưu ưu tiên khi chạy lại.
 
+### Tối ưu nâng cao: chạy thử và hiệu chỉnh lặp (AI)
+Nằm ở cuối thẻ **Tối ưu**. Nên chạy sau bước Tối ưu ở trên.
+
+1. Chọn phương pháp:
+   - **SPSA**: tự hiệu chỉnh offset và thời lượng xanh bằng chạy thử CTM, không cần Internet.
+   - **Cố vấn AI (Claude)**: cần khoá API Anthropic và Internet.
+2. Chọn số vòng, phạm vi (mọi nút hoặc chỉ các nút kém nhất) và thời lượng mỗi lần chạy thử.
+3. Bấm **Chạy tối ưu lặp**. Biểu đồ cho thấy J (chỉ số mục tiêu) của từng lần thử và J tốt nhất. Có thể bấm **Dừng** bất kỳ lúc nào; hệ thống vẫn giữ nghiệm tốt nhất.
+4. Phương án tốt nhất được ghi vào **Đề xuất**. Với Cố vấn AI, nhật ký hiển thị nhận định và từng đề xuất kèm lý do, ΔJ và trạng thái nhận/loại.
+
+Chi tiết phương pháp và lộ trình nghiên cứu: `docs/AI_TOI_UU.md`.
+
 ## 5. Mô phỏng và đối sánh
 Thẻ **Mô phỏng**:
 - Chọn kịch bản: Hiện trạng · Đề xuất cố định · Đề xuất + thích ứng theo khuyến nghị · Max Pressure chu kỳ cố định toàn mạng · Max Pressure không chu kỳ · Xe kích hoạt.

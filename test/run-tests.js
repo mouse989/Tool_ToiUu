@@ -219,6 +219,25 @@ test('OSM: gộp nút đường đôi, rút gọn nút bậc 2, gán đèn lệc
   assert.ok(r.exits > 0 && isFinite(r.delayVehH));
 });
 
+test('AI: chiếu xanh khả thi; SPSA không làm xấu; vòng LLM chỉ nhận đề xuất tốt hơn', async () => {
+  const g = TS.aiopt.projectGreens([10, 80, 3], [15, 15, 15], 90);
+  assert.strictEqual(g.reduce((a, b) => a + b, 0), 90); assert.ok(g.every(x => x >= 15));
+  const p = D.generate({ rows: 4, cols: 5, seed: 9 });
+  await OPT.run(p, 'am', { verifyCTM: false });
+  const r = await TS.aiopt.runSPSA(p, 'am', { iters: 6, duration: 600 });
+  assert.ok(r.final <= r.start + 1e-9, `SPSA ${r.final} > ${r.start}`);
+  for (const n of p.nodes) { const pl = n.opt.am; const C = M.cycleOf(pl); assert.ok(pl.offset >= 0 && pl.offset < C); for (const ph of pl.phases) assert.ok(ph.g >= (ph.minG || p.params.minGreen)); }
+  const mock = async (msgs) => {
+    const ctx = JSON.parse(msgs[msgs.length - 1].content.split('\n').slice(1).join('\n'));
+    const n = ctx.worst_nodes[0];
+    const t = JSON.stringify({ analysis: 'thử', actions: [{ node: n.node, type: 'offset', offset: (n.offset + 7) % n.C, reason: 'r' }, { node: 'KHONG_CO', type: 'split', greens: [1], reason: 'x' }] });
+    return { text: t, content: [{ type: 'text', text: t }] };
+  };
+  const r2 = await TS.aiopt.runLLM(p, 'am', { rounds: 2, duration: 600 }, null, null, mock);
+  assert.ok(r2.final <= r2.start + 1e-9);
+  assert.ok(r2.log.filter(x => x.kind === 'action').every(x => x.ok === (x.dJ < 0)));
+});
+
 test('Pipeline tối ưu 150 nút: đề xuất tốt hơn hiện trạng', async () => {
   const p = D.generate({ rows: 10, cols: 15, seed: 7 });
   const r = await OPT.run(p, 'am', { verifyCTM: true, ctmDuration: 900, ctmWarmup: 300 });
