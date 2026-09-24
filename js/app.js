@@ -1571,7 +1571,7 @@
     $('sMul').onchange = (e) => { simCfg.demandMul = U.num(e.target.value, 1); };
     $('sProf').onchange = (e) => { simCfg.profile = e.target.value; };
     $('sCV').onchange = (e) => { simCfg.noiseCV = U.num(e.target.value, 0); };
-    $('sSpd').onchange = (e) => { S.simSpeed = +e.target.value; };
+    $('sSpd').onchange = (e) => { S.simSpeed = +e.target.value; simRate.v = 0; simRate.sim = 0; simRate.real = 0; };
     $('sPlay').onclick = () => { if (!S.sim) startSim(); else { S.playing = !S.playing; if (S.playing) loop(); renderSimButtons(); } };
     $('sReset').onclick = () => { stopSim(); startSim(); };
     $('sStop').onclick = () => { stopSim(); };
@@ -1610,18 +1610,26 @@
     $('hud').hidden = true;
     legend(); renderSimButtons(); updateSimKpi(); view.redraw(); drawDock();
   }
-  let lastFrame = 0, lastDockDraw = 0;
+  // Nhịp phát: tích luỹ thời gian mô phỏng cần chạy (= tốc độ × thời gian thực) rồi mới bước từng dt.
+  // Không bước "ít nhất 1 lần mỗi khung hình" – nếu không ×1…×40 sẽ cùng chạy ~×60.
+  let lastFrame = 0, lastDockDraw = 0, simAcc = 0, lastRedraw = 0, rafId = 0;
+  const simRate = { sim: 0, real: 0, v: 0 };
   function loop(ts) {
-    if (!S.playing || !S.sim) return;
+    if (ts === undefined) { window.cancelAnimationFrame(rafId); lastFrame = 0; simAcc = 0; }   // gọi trực tiếp khi chạy/tiếp tục: chỉ giữ 1 vòng lặp
+    if (!S.playing || !S.sim) { lastFrame = 0; simAcc = 0; return; }
     const now = ts || performance.now();
-    const dtReal = lastFrame ? Math.min(0.1, (now - lastFrame) / 1000) : 0.016;
+    const dtReal = lastFrame ? Math.min(0.1, (now - lastFrame) / 1000) : 0;
     lastFrame = now;
-    const target = S.sim.t + S.simSpeed * dtReal;
-    const t0 = performance.now();
-    while (S.sim.t < target && performance.now() - t0 < 28) S.sim.step();
-    view.redraw();
+    const dt = S.sim.cfg.dt || 1;
+    simAcc += S.simSpeed * dtReal;
+    const t0 = performance.now(), tSim0 = S.sim.t;
+    while (simAcc >= dt && performance.now() - t0 < 28) { S.sim.step(); simAcc -= dt; }
+    if (simAcc > dt) simAcc = dt;   // máy không theo kịp: bỏ phần tồn, không dồn bước
+    simRate.sim += S.sim.t - tSim0; simRate.real += dtReal;
+    if (simRate.real >= 1) { simRate.v = simRate.sim / simRate.real; simRate.sim = 0; simRate.real = 0; }
+    if (S.sim.t !== tSim0 || now - lastRedraw > 250) { lastRedraw = now; view.redraw(); }
     if (now - lastDockDraw > 400) { lastDockDraw = now; updateSimKpi(); if (S.sel && S.sel.type === 'zone') renderInspector(); if (S.dock !== 'curve') drawDock(); }
-    requestAnimationFrame(loop);
+    rafId = requestAnimationFrame(loop);
   }
   function balTag(x) {
     if (!x.inr) return '';
@@ -1636,7 +1644,7 @@
     const t = s.t, hh = Math.floor(t / 3600), mm = Math.floor(t % 3600 / 60), ss = Math.floor(t % 60);
     const clock = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
     let spill = 0; for (let i = 0; i < s.spillNow.length; i++) spill += s.spillNow[i];
-    hud.innerHTML = `<div style="color:var(--muted);font-size:11px">${esc(SCN[S.simScenario])}</div><b>${clock}</b> <span class="note">×${S.simSpeed}</span><br>${U.fmt(last.veh)} pcu trong mạng${last.buf > 1 ? ' + ' + U.fmt(last.buf) + ' chờ vào' : ''} · ${last.speed.toFixed(1)} km/h<br>vào ${U.fmt(last.inr || 0)} · ra ${U.fmt(last.thr)} pcu/h ${balTag(last)}<br>${spill} nhánh tràn ngược`;
+    hud.innerHTML = `<div style="color:var(--muted);font-size:11px">${esc(SCN[S.simScenario])}</div><b>${clock}</b> <span class="note">×${S.simSpeed}${simRate.v && simRate.v < 0.85 * S.simSpeed ? ` <span style="color:var(--bad-ink)" title="Máy không đủ nhanh để đạt tốc độ đã chọn">(thực ×${Math.round(simRate.v)})</span>` : ''}</span><br>${U.fmt(last.veh)} pcu trong mạng${last.buf > 1 ? ' + ' + U.fmt(last.buf) + ' chờ vào' : ''} · ${last.speed.toFixed(1)} km/h<br>vào ${U.fmt(last.inr || 0)} · ra ${U.fmt(last.thr)} pcu/h ${balTag(last)}<br>${spill} nhánh tràn ngược`;
     if (box) box.innerHTML = `<div class="tiles" style="margin-top:8px"><div class="tile"><small>Thời gian</small><b class="mono" style="font-size:15px">${clock}</b></div><div class="tile"><small>Vận tốc TB</small><b>${last.speed.toFixed(1)}</b><small>km/h (phút gần nhất)</small></div><div class="tile"><small>Tràn ngược</small><b>${spill}</b><small>nhánh</small></div></div>`;
   }
 
