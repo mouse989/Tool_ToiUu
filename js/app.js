@@ -717,9 +717,9 @@
         ${pf('exchangeRate', 'Tỷ lệ xe ra/vào hẻm, công trình')}${pf('fifo', 'Mức FIFO nhánh ≥ 2 làn (0–1)')}
       </div>
       <label class="field" style="margin-top:6px">Nền bản đồ (URL ô XYZ)<select id="tileSel">
-        <option value="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png">CARTO Voyager (mặc định)</option>
+        <option value="https://tile.openstreetmap.org/{z}/{x}/{y}.png">OpenStreetMap (mặc định)</option>
+        <option value="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png">CARTO Voyager (dự phòng khi OSM bị chặn)</option>
         <option value="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png">CARTO Positron (nhạt)</option>
-        <option value="https://tile.openstreetmap.org/{z}/{x}/{y}.png">OpenStreetMap (chỉ khi chạy qua máy chủ web)</option>
         <option value="custom">Máy chủ GIS nội bộ (tự nhập)…</option></select></label>
       <h3>Khung giờ</h3>
       <div id="bandList">${p.bands.map((b, i) => `<div class="row"><input class="inp mono" value="${esc(b.id)}" style="width:70px" disabled><input class="inp" data-bl="${i}" value="${esc(b.label)}" style="flex:1"></div>`).join('')}</div>
@@ -1388,8 +1388,12 @@
     S.sel = null; S.tsd = null; S.chain = []; S.ab = null; S.zoneColor = null;
     S.scenario = S.project.nodes.some(n => n.opt && n.opt[S.band]) && S.project.results && S.project.results[S.band] ? 'opt' : 'base';
     setScenarioButtons();
-    // OSM chặn ô bản đồ khi mở file:// (không có Referer) → tự chuyển sang CARTO
-    if (/tile\.openstreetmap\.org/.test(S.project.params.tileUrl) && window.location.protocol === 'file:') S.project.params.tileUrl = M.DEFAULT_PARAMS.tileUrl;
+    // dự án lưu từ bản trước (mặc định CARTO Voyager) → trở lại nền OSM mặc định
+    if (/rastertiles\/voyager/.test(S.project.params.tileUrl)) S.project.params.tileUrl = M.DEFAULT_PARAMS.tileUrl;
+    if (/tile\.openstreetmap\.org/.test(S.project.params.tileUrl) && window.location.protocol === 'file:' && !S.osmWarned) {
+      S.osmWarned = true;
+      setTimeout(() => toast('Nền OSM có thể hiện "403 Access blocked" khi mở trực tiếp index.html. Hãy chạy chay_ung_dung.bat (http://localhost:8080) hoặc chọn nền CARTO ở thẻ Dữ liệu.'), 1500);
+    }
     setTiles(S.project.params.tileUrl);
     invalidate(true); fillBands(); updateChainInfo(); setTool('sel');
     if (fit) fitAll();

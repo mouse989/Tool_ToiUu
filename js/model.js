@@ -40,7 +40,7 @@
     exchangeRate: 0.08,   // tỷ lệ xe kết thúc/bắt đầu chuyến tại nút thường (vào hẻm, nhà, điểm đỗ)
     fifo: 0.5,            // mức FIFO khi nhánh ≥ 2 làn (1 = FIFO chặt: 1 hướng tắc chặn cả nhánh; 0 = làn rẽ tách hẳn)
     pcu: { xe_may: 0.3, o_to: 1.0, xe_tai: 2.0, xe_buyt: 2.5 },
-    tileUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', // CARTO Voyager: chạy được cả khi mở file:// (OSM chặn yêu cầu không có Referer)
+    tileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', // OpenStreetMap chuẩn
   };
 
   M.newProject = function (name) {
