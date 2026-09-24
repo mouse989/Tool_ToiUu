@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tối ưu Tín hiệu Mạng lưới</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">TSO · Tối ưu Tín hiệu Mạng lưới<small>Mô phỏng · Sóng xanh · Phân vùng · Thích ứng</small></div>
+  <input class="pname" id="pname" aria-label="Tên dự án" value="">
+  <label class="row" style="margin:0;gap:4px;font-size:12px;color:var(--muted)">Khung giờ <select class="sel" id="band" aria-label="Khung giờ"></select></label>
+  <span class="seg" role="group" aria-label="Phương án hiển thị"><button id="scBase" aria-pressed="true" title="Giản đồ pha đang cài đặt ngoài hiện trường">Hiện trạng</button><button id="scOpt" aria-pressed="false" title="Giản đồ pha do bộ tối ưu đề xuất">Đề xuất</button></span>
+  <span class="sp"></span>
+  <div class="menu"><button class="btn" id="mNew">Mới ▾</button>
+    <div class="menu-list" hidden>
+      <button data-act="demo500">Mạng mẫu 500 nút (giả lập)</button>
+      <button data-act="demo150">Mạng mẫu 150 nút (giả lập)</button>
+      <button data-act="blank">Dự án trống (tự vẽ trên bản đồ)</button>
+    </div></div>
+  <button class="btn" id="bOpen" title="Mở dự án (.json) hoặc file Green Zone Player (index.html / data.json)">Mở…</button>
+  <button class="btn" id="bSave" title="Lưu dự án ra file .json (kèm kết quả tối ưu)">Lưu</button>
+  <div class="menu"><button class="btn" id="mImport">Nhập ▾</button>
+    <div class="menu-list" hidden>
+      <button data-act="csv">Nhập CSV (tự nhận dạng loại)…</button>
+      <button data-act="gz">Nhập từ Green Zone Player (index.html / data.json)…</button>
+      <hr>
+      <button data-act="tpl-nodes">Tải mẫu CSV: nút giao</button>
+      <button data-act="tpl-plans">Tải mẫu CSV: giản đồ pha</button>
+      <button data-act="tpl-links">Tải mẫu CSV: nhánh & lưu lượng</button>
+      <button data-act="tpl-appr">Tải mẫu CSV: hướng tiếp cận của nút</button>
+    </div></div>
+  <div class="menu"><button class="btn" id="mExport">Xuất ▾</button>
+    <div class="menu-list" hidden>
+      <button data-act="sheet">Phiếu cài đặt tủ (CSV, mọi khung giờ)</button>
+      <button data-act="report">Báo cáo phương án (HTML, in được)</button>
+      <hr>
+      <button data-act="x-nodes">CSV nút giao</button>
+      <button data-act="x-plans">CSV giản đồ pha (hiện trạng + đề xuất)</button>
+      <button data-act="x-links">CSV nhánh & lưu lượng</button>
+    </div></div>
+  <button class="btn ghost" id="theme" title="Giao diện: theo hệ thống → sáng → tối">◐</button>
+</header>
+<main class="app" id="app">
+  <aside class="left">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="data" aria-selected="true">Dữ liệu</button>
+      <button role="tab" data-tab="opt" aria-selected="false">Tối ưu</button>
+      <button role="tab" data-tab="sim" aria-selected="false">Mô phỏng</button>
+      <button role="tab" data-tab="rep" aria-selected="false">Báo cáo</button>
+    </div>
+    <div class="pane" id="pane-data"></div>
+    <div class="pane" id="pane-opt" hidden></div>
+    <div class="pane" id="pane-sim" hidden></div>
+    <div class="pane" id="pane-rep" hidden></div>
+  </aside>
+  <section class="center">
+    <div class="maptools">
+      <span class="seg" role="group" aria-label="Công cụ bản đồ">
+        <button id="tSel" aria-pressed="true" title="Chọn nút/nhánh (Ctrl+nhấp: thêm vào chuỗi hành lang tự chọn)">Chọn</button>
+        <button id="tAddN" aria-pressed="false" title="Nhấp lên bản đồ để thêm nút giao">+ Nút</button>
+        <button id="tAddL" aria-pressed="false" title="Nhấp nút đầu rồi nút cuối để thêm nhánh 2 chiều (giữ Shift: 1 chiều)">+ Nhánh</button>
+        <button id="tMove" aria-pressed="false" title="Kéo nút để di chuyển">Di chuyển</button>
+      </span>
+      <label class="row" style="margin:0;gap:4px;font-size:12px;color:var(--muted)">Tô màu
+        <select class="sel" id="colorBy">
+          <option value="vc">Độ bão hoà v/c</option>
+          <option value="los">Mức phục vụ LOS (HCM)</option>
+          <option value="delay">Độ trễ (s/pcu)</option>
+          <option value="flow">Lưu lượng q</option>
+          <option value="src">Nguồn dữ liệu</option>
+          <option value="zone">Vùng điều khiển</option>
+        </select></label>
+      <label class="chk" style="margin:0"><input type="checkbox" id="basemap" checked> Nền bản đồ</label>
+      <input class="inp" id="search" type="search" placeholder="Tìm mã nút / tên đường" style="width:150px">
+      <span class="sp"></span>
+      <span id="chainInfo" class="note" style="margin:0"></span>
+      <button class="btn sm" id="fit" title="Thu phóng vừa toàn mạng">⤢ Toàn mạng</button>
+    </div>
+    <div class="mapwrap" id="mapwrap">
+      <canvas id="map" aria-label="Bản đồ mạng lưới nút giao và nhánh tiếp cận"></canvas>
+      <div class="legend" id="legend"></div>
+      <div class="hud" id="hud" hidden></div>
+      <div class="tip" id="tip" hidden></div>
+      <div class="attrib" id="attrib">© OpenStreetMap contributors</div>
+    </div>
+    <div class="dock" id="dock">
+      <div class="tabs" role="tablist">
+        <button role="tab" data-dock="tsd" aria-selected="true">Biểu đồ thời gian – khoảng cách</button>
+        <button role="tab" data-dock="series" aria-selected="false">Diễn biến mô phỏng</button>
+        <button role="tab" data-dock="curve" aria-selected="false">Đường cong chu kỳ vùng</button>
+        <span class="sp"></span>
+        <button id="dockMin" title="Thu gọn / mở rộng" style="flex:none">▾</button>
+      </div>
+      <div class="dock-body" id="dockBody"><canvas id="dockCanvas"></canvas><div class="dock-empty" id="dockEmpty"></div><div class="dock-legend" id="dockLegend"></div></div>
+    </div>
+  </section>
+  <aside class="right">
+    <div class="pane insp" id="insp"></div>
+  </aside>
+</main>
+<div class="modal" id="modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head"><h3 id="modalTitle"></h3><button class="btn ghost" id="modalX" aria-label="Đóng">✕</button></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+<div id="toast" aria-live="polite"></div>
+<input type="file" id="fileInput" hidden>
+<script src="js/util.js"></script>
+<script src="js/model.js"></script>
+<script src="js/signal.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/maxband.js"></script>
+<script src="js/zoning.js"></script>
+<script src="js/ctm.js"></script>
+<script src="js/demo.js"></script>
+<script src="js/optimizer.js"></script>
+<script src="js/io.js"></script>
+<script src="js/mapview.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

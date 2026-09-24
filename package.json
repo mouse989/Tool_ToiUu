@@ -1,0 +1,10 @@
+{
+  "name": "tso-toi-uu-tin-hieu",
+  "version": "1.0.0",
+  "description": "Mô phỏng và tối ưu tín hiệu giao thông mạng lưới (sóng xanh, phân vùng, thích ứng)",
+  "private": true,
+  "scripts": {
+    "test": "node test/run-tests.js",
+    "start": "npx --yes http-server -p 8080 -c-1 ."
+  }
+}
