@@ -1205,27 +1205,54 @@
   }
 
   /* ── Tối ưu nâng cao: chạy thử – hiệu chỉnh lặp (SPSA / cố vấn LLM) ── */
-  const aiOpts = { method: 'spsa', iters: 30, rounds: 3, scope: 'all', minutes: 15, model: 'claude-opus-5', remember: false };
-  const AIS = { running: false, stop: false, trace: null, log: [], res: null, msg: '' };
+  const aiOpts = { method: 'spsa', iters: 30, rounds: 3, scope: 'all', minutes: 15 };
+  const LLM_DEF = { enabled: false, model: 'claude-opus-5', baseURL: '', topN: 15, maxActions: 8 };
+  let llmCfg = Object.assign({}, LLM_DEF);
+  try { llmCfg = Object.assign({}, LLM_DEF, JSON.parse(localStorage.getItem('tso.llm') || '{}')); } catch { /* bỏ qua */ }
+  const saveLlm = () => { try { localStorage.setItem('tso.llm', JSON.stringify(llmCfg)); } catch { /* bỏ qua */ } };
+  function llmConfigDlg() {
+    modal('Cấu hình cố vấn AI (LLM)', `
+      <label class="chk" style="font-size:14px"><input type="checkbox" id="lcOn" ${llmCfg.enabled ? 'checked' : ''}> <b>Bật cố vấn AI (LLM)</b></label>
+      <p class="note">Khi tắt: phần mềm không gọi bất kỳ dịch vụ AI bên ngoài nào; tối ưu nâng cao vẫn dùng được bằng SPSA (chạy hoàn toàn trên máy). Khi bật: cần tài khoản Anthropic (Claude) và Internet.</p>
+      <div class="grid2">
+        <label class="field">Nhà cung cấp<select disabled><option>Anthropic – Claude</option></select></label>
+        <label class="field">Mô hình<input id="lcModel" value="${esc(llmCfg.model)}"></label>
+        <label class="field" style="grid-column:1/3">Khoá API<input type="password" id="lcKey" value="${esc(aiKey())}" placeholder="sk-ant-…"></label>
+        <label class="field" style="grid-column:1/3">Địa chỉ máy chủ trung gian (tuỳ chọn)<input id="lcBase" value="${esc(llmCfg.baseURL)}" placeholder="để trống = https://api.anthropic.com"></label>
+        <label class="field">Số nút kém nhất gửi cho AI<input type="number" id="lcTop" value="${llmCfg.topN}"></label>
+        <label class="field">Số đề xuất tối đa mỗi vòng<input type="number" id="lcAct" value="${llmCfg.maxActions}"></label>
+      </div>
+      <label class="chk"><input type="checkbox" id="lcRem" ${aiKey() ? 'checked' : ''}> Ghi nhớ khoá trên máy này (localStorage, không lưu vào file dự án)</label>
+      <p class="note">Máy chủ trung gian: khuyến nghị khi triển khai tại Trung tâm — đặt một proxy nội bộ giữ khoá API, máy trạm chỉ trỏ tới proxy (không cần nhập khoá). Dữ liệu gửi đi gồm chỉ số & giản đồ pha của các nút kém nhất, không gửi toạ độ.</p>`,
+      [{ label: 'Huỷ' }, { label: 'Lưu cấu hình', cls: 'accent', onClick: () => {
+        llmCfg.enabled = $('lcOn').checked; llmCfg.model = $('lcModel').value.trim() || LLM_DEF.model; llmCfg.baseURL = $('lcBase').value.trim();
+        llmCfg.topN = U.clamp(U.num($('lcTop').value, 15), 3, 50); llmCfg.maxActions = U.clamp(U.num($('lcAct').value, 8), 1, 20);
+        const k = $('lcKey').value.trim();
+        try { if ($('lcRem').checked && k) localStorage.setItem('tso.anthropicKey', k); else localStorage.removeItem('tso.anthropicKey'); } catch { /* bỏ qua */ }
+        AIS.sessionKey = k;
+        saveLlm();
+        if (!llmCfg.enabled && aiOpts.method === 'llm') aiOpts.method = 'spsa';
+        renderOpt(); toast(llmCfg.enabled ? 'Đã bật cố vấn AI' : 'Đã tắt cố vấn AI');
+      } }]);
+  }
+  const AIS = { running: false, stop: false, trace: null, log: [], res: null, msg: '', sessionKey: '' };
   function aiKey() { try { return localStorage.getItem('tso.anthropicKey') || ''; } catch { return ''; } }
   function aiSectionHtml() {
     const hasOpt = S.project.nodes.some(n => n.opt && n.opt[S.band]);
     const r = AIS.res;
     return `<h3 style="margin-top:18px">Tối ưu nâng cao · chạy thử & hiệu chỉnh lặp (AI)</h3>
       <p class="note">Mô phỏng CTM làm thước đo; hệ thống lặp: đề xuất điều chỉnh → chạy thử → giữ nếu tốt hơn. Nên chạy sau bước Tối ưu ở trên${hasOpt ? '' : ' (hiện chưa có đề xuất — sẽ xuất phát từ hiện trạng)'}.</p>
+      <div class="row"><span class="badge ${llmCfg.enabled ? 'ok' : ''}">Cố vấn AI (LLM): ${llmCfg.enabled ? 'BẬT · ' + esc(llmCfg.model) : 'TẮT'}</span><button class="btn sm" id="aiCfg">⚙ Cấu hình AI</button></div>
       <label class="field">Phương pháp<select id="aiM">
         <option value="spsa" ${aiOpts.method === 'spsa' ? 'selected' : ''}>SPSA — tự hiệu chỉnh offset & xanh bằng chạy thử (không cần Internet)</option>
-        <option value="llm" ${aiOpts.method === 'llm' ? 'selected' : ''}>Cố vấn AI (Claude) — đề xuất có lý do, mô phỏng kiểm chứng</option></select></label>
+        ${llmCfg.enabled ? `<option value="llm" ${aiOpts.method === 'llm' ? 'selected' : ''}>Cố vấn AI (Claude) — đề xuất có lý do, mô phỏng kiểm chứng</option>` : ''}</select></label>
       <div class="grid2" style="margin-top:6px">
         <label class="field" ${aiOpts.method === 'llm' ? 'hidden' : ''}>Số vòng lặp<input type="number" id="aiIt" value="${aiOpts.iters}"></label>
         <label class="field" ${aiOpts.method === 'spsa' ? 'hidden' : ''}>Số vòng hỏi AI<input type="number" id="aiRd" value="${aiOpts.rounds}"></label>
         <label class="field">Phạm vi<select id="aiSc"><option value="all" ${aiOpts.scope === 'all' ? 'selected' : ''}>Mọi nút có đèn</option><option value="worst" ${aiOpts.scope === 'worst' ? 'selected' : ''}>25% nút kém nhất + lân cận</option><option value="worst10" ${aiOpts.scope === 'worst10' ? 'selected' : ''}>10% nút kém nhất + lân cận</option></select></label>
         <label class="field">Thời lượng mỗi lần chạy thử (phút)<input type="number" id="aiMin" value="${aiOpts.minutes}"></label>
       </div>
-      ${aiOpts.method === 'llm' ? `<div class="grid2" style="margin-top:6px"><label class="field">Khoá API Anthropic<input type="password" id="aiKey" value="${esc(aiKey())}" placeholder="sk-ant-…"></label>
-        <label class="field">Mô hình<input id="aiModel" value="${esc(aiOpts.model)}"></label></div>
-        <label class="chk"><input type="checkbox" id="aiRem" ${aiKey() ? 'checked' : ''}> Ghi nhớ khoá trên máy này (localStorage; không lưu vào file dự án)</label>
-        <p class="note">Dữ liệu gửi đi: chỉ số và giản đồ của các nút kém nhất (mã nút, tên đường, lưu lượng, thời gian pha). Không gửi toạ độ. Chi phí tính theo token của tài khoản Anthropic.</p>` : ''}
+      ${aiOpts.method === 'llm' ? `<p class="note">Mô hình ${esc(llmCfg.model)}${llmCfg.baseURL ? ' qua ' + esc(llmCfg.baseURL) : ''}; ${aiKey() || AIS.sessionKey ? 'đã có khoá API' : '<span class="bad">chưa nhập khoá API</span> (⚙ Cấu hình AI)'}. Gửi ${llmCfg.topN} nút kém nhất, tối đa ${llmCfg.maxActions} đề xuất/vòng.</p>` : ''}
       <div class="row"><button class="btn accent" id="aiRun" ${AIS.running || S.optRunning ? 'disabled' : ''}>${AIS.running ? 'Đang chạy…' : 'Chạy tối ưu lặp'}</button><button class="btn" id="aiStop" ${AIS.running ? '' : 'disabled'}>Dừng</button></div>
       <div class="note" id="aiMsg">${esc(AIS.msg)}</div>
       <canvas id="aiChart" style="width:100%;height:150px;display:${AIS.trace && AIS.trace.length > 1 ? 'block' : 'none'}"></canvas>
@@ -1243,26 +1270,24 @@
     const g = (id) => $(id);
     if (!g('aiM')) return;
     g('aiM').onchange = (e) => { aiOpts.method = e.target.value; renderOpt(); };
+    g('aiCfg').onclick = llmConfigDlg;
     if (g('aiIt')) g('aiIt').onchange = (e) => { aiOpts.iters = Math.max(2, U.num(e.target.value, 30)); };
     if (g('aiRd')) g('aiRd').onchange = (e) => { aiOpts.rounds = Math.max(1, U.num(e.target.value, 3)); };
     g('aiSc').onchange = (e) => { aiOpts.scope = e.target.value; };
     g('aiMin').onchange = (e) => { aiOpts.minutes = Math.max(5, U.num(e.target.value, 15)); };
-    if (g('aiModel')) g('aiModel').onchange = (e) => { aiOpts.model = e.target.value.trim() || 'claude-opus-5'; };
     g('aiRun').onclick = runAi;
     g('aiStop').onclick = () => { AIS.stop = true; AIS.msg = 'Đang dừng sau lần chạy thử hiện tại…'; if ($('aiMsg')) $('aiMsg').textContent = AIS.msg; };
     drawAiChart();
   }
   async function runAi() {
     if (AIS.running) return;
-    const key = $('aiKey') ? $('aiKey').value.trim() : '';
-    if (aiOpts.method === 'llm') {
-      if (!key) { toast('Nhập khoá API Anthropic để dùng cố vấn AI', true); return; }
-      try { if ($('aiRem') && $('aiRem').checked) localStorage.setItem('tso.anthropicKey', key); else localStorage.removeItem('tso.anthropicKey'); } catch { /* bỏ qua */ }
-    }
+    if (aiOpts.method === 'llm' && !llmCfg.enabled) aiOpts.method = 'spsa';
+    const key = AIS.sessionKey || aiKey();
+    if (aiOpts.method === 'llm' && !key && !llmCfg.baseURL) { toast('Chưa có khoá API — mở ⚙ Cấu hình AI', true); llmConfigDlg(); return; }
     stopSim();
     Object.assign(AIS, { running: true, stop: false, trace: [], log: [], res: null, msg: 'Đang chạy thử phương án xuất phát…' });
     renderOpt();
-    const o = { iters: aiOpts.iters, rounds: aiOpts.rounds, scope: aiOpts.scope, warmup: 300, duration: aiOpts.minutes * 60, apiKey: key, model: aiOpts.model };
+    const o = { iters: aiOpts.iters, rounds: aiOpts.rounds, scope: aiOpts.scope, warmup: 300, duration: aiOpts.minutes * 60, apiKey: key || 'proxy', model: llmCfg.model, baseURL: llmCfg.baseURL, topN: llmCfg.topN, maxActions: llmCfg.maxActions };
     const prog = (info) => {
       AIS.trace = info.trace; if (info.log) AIS.log = info.log;
       AIS.msg = info.msg || `Vòng ${info.it}/${info.iters} · J tốt nhất ${info.best.toFixed(1)} (xuất phát ${info.start.toFixed(1)}) · ${info.nNodes} nút, ${info.nVars} biến`;
@@ -1421,6 +1446,7 @@
     opt: 'Đề xuất – cố định',
     'opt-rec': 'Đề xuất + thích ứng theo khuyến nghị',
     'opt-mp': 'Đề xuất – Max Pressure chu kỳ cố định toàn mạng',
+    'opt-cact': 'Đề xuất – phối hợp xe kích hoạt (tủ thông minh)',
     mp: 'Max Pressure không chu kỳ toàn mạng',
     act: 'Xe kích hoạt toàn mạng',
   };
@@ -1428,6 +1454,7 @@
     base: ['Giản đồ HIỆN TRẠNG (thẻ phải → "Giản đồ pha hiện trạng")', 'Mỗi tủ chạy theo chế độ khai báo ở ô "Điều khiển" của nút (mặc định: cố định)'],
     opt: ['Giản đồ ĐỀ XUẤT do bộ tối ưu tính (C vùng, split, offset sóng xanh)', 'Mọi tủ chạy cố định theo giản đồ'],
     'opt-rec': ['Giản đồ ĐỀ XUẤT', 'Cố định, riêng các vùng được khuyến nghị "thích ứng" chạy Max Pressure (vùng phối hợp: giữ C và offset, split đổi theo áp lực; nút độc lập: đổi pha tự do)'],
+    'opt-cact': ['Giản đồ ĐỀ XUẤT (C, offset, xanh max = xanh đề xuất)', 'Mọi tủ: phối hợp – xe kích hoạt: pha chính kết thúc đúng mốc phối hợp; pha phụ hết xe thì kết thúc sớm, thời gian thừa trả cho pha chính (early return). Lưu ý: mô hình dòng liên tục CTM đánh giá THẤP lợi ích của kích hoạt — nên kiểm chứng thêm bằng mô phỏng vi mô'],
     'opt-mp': ['Giản đồ ĐỀ XUẤT (lấy C, offset, thứ tự pha)', 'Mọi tủ: Max Pressure chu kỳ cố định — split mỗi chu kỳ theo áp lực hàng chờ, ±4 s/chu kỳ'],
     mp: ['Giản đồ ĐỀ XUẤT nếu có, không thì HIỆN TRẠNG (chỉ lấy vàng, đỏ toàn phần, xanh min/max)', 'Mọi tủ: Max Pressure không chu kỳ — mỗi 3 s chọn pha có áp lực lớn nhất'],
     act: ['Giản đồ ĐỀ XUẤT nếu có, không thì HIỆN TRẠNG (lấy vàng, đỏ, xanh min/max)', 'Mọi tủ: xe kích hoạt — kéo dài xanh khi còn hàng chờ, tối đa xanh max'],
@@ -1455,6 +1482,7 @@
     if (!hasOpt && key !== 'mp' && key !== 'act') throw new Error('Chưa có giản đồ đề xuất — chạy Tối ưu trước');
     if (key === 'opt') return Object.assign(base, { scenario: 'opt', mode: 'fixed' });
     if (key === 'opt-mp') return Object.assign(base, { scenario: 'opt', mode: 'cmp' });
+    if (key === 'opt-cact') return Object.assign(base, { scenario: 'opt', mode: 'cact' });
     if (key === 'mp') return Object.assign(base, { scenario: hasOpt ? 'opt' : 'base', mode: 'mp' });
     if (key === 'act') return Object.assign(base, { scenario: hasOpt ? 'opt' : 'base', mode: 'actuated' });
     const r = result(), modes = {};

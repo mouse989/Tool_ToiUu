@@ -14,7 +14,7 @@
   const U = TS.util, M = TS.model;
   const SIM = TS.ctm = {};
 
-  SIM.MODES = { fixed: 'Cố định (giản đồ pha)', actuated: 'Xe kích hoạt (Actuated)', mp: 'Max Pressure (thích ứng)', cmp: 'Max Pressure chu kỳ cố định (phối hợp + thích ứng)' };
+  SIM.MODES = { fixed: 'Cố định (giản đồ pha)', actuated: 'Xe kích hoạt (Actuated)', mp: 'Max Pressure (thích ứng)', cmp: 'Max Pressure chu kỳ cố định (phối hợp + thích ứng)', cact: 'Phối hợp – xe kích hoạt (trả xanh sớm cho pha chính)' };
 
   SIM.create = function (net, cfg) {
     const P = net.P;
@@ -65,6 +65,7 @@
     const Ttot = c.total || (c.warmup + c.duration);
     const demandF = (tt) => c.profile === 'peak' ? 0.7 + 0.3 * Math.sin(Math.PI * U.clamp(tt / Ttot, 0, 1)) : 1;
     const srcInj = new Float64Array(NL), rJ = new Float64Array(NL);
+
     const rnd = U.rng(c.seed);
 
     // ── bộ điều khiển ──
@@ -75,8 +76,14 @@
       const plan = U.deepClone(M.getPlan(node, net.band, c.scenario));
       const mode = (c.modes && c.modes[v]) || c.mode || node.control || 'fixed';
       const C = M.cycleOf(plan);
-      const st = { v, plan, mode, C, k: 0, part: 'g', tIn: 0, g: plan.phases.map(p => p.g), gCur: plan.phases[0].g, press: new Float64Array(plan.phases.length), pressN: 0, next: 0, lastCycle: -1 };
-      if (mode === 'fixed' || mode === 'cmp') {
+      const st = { v, plan, mode, C, coord: 0, endAt: [], k: 0, part: 'g', tIn: 0, g: plan.phases.map(p => p.g), gCur: plan.phases[0].g, press: new Float64Array(plan.phases.length), pressN: 0, next: 0, lastCycle: -1 };
+      if (mode === 'cact') {
+        // pha phối hợp = pha phục vụ lưu lượng lớn nhất; mốc kết thúc xanh (force-off) cố định trong chu kỳ
+        const fl = plan.phases.map((_, k) => U.sum(net.inL[v], i => (links[i].phases.includes(k) ? links[i].q : 0)));
+        st.coord = fl.indexOf(Math.max(...fl));
+        let tt = 0; st.endAt = plan.phases.map(ph => { const e = tt + ph.g; tt += ph.g + ph.y + ph.ar; return e; });
+      }
+      if (mode === 'fixed' || mode === 'cmp' || mode === 'cact') {
         const pa = M.phaseAt(plan, 0);
         st.k = pa.k; st.part = pa.part;
         const ph = plan.phases[pa.k];
@@ -114,6 +121,17 @@
       return false;
     }
 
+    function vehiclesNear(st, k) {
+      // có xe trong ~3 ô cuối của nhánh do pha phục vụ (tương đương đầu dò kéo dài xanh)
+      for (const i of net.inL[st.v]) {
+        const l = links[i]; if (!l.phases.includes(k)) continue;
+        const b = c0[i] + nc[i] - 1; let s = 0;
+        for (let x = b; x >= Math.max(c0[i], b - 2); x--) s += n[x];
+        if (s > 0.3) return true;
+      }
+      return false;
+    }
+
     function advanceController(st, t) {
       const pl = st.plan, phs = pl.phases, np = phs.length;
       if (st.mode === 'fixed') {
@@ -125,9 +143,9 @@
       }
       st.tIn += dt;
       const ph = phs[st.k];
-      if (st.mode === 'cmp') {
-        // chu kỳ cố định; tích luỹ áp lực để phân split cho chu kỳ kế
-        if (Math.round(t) % 5 === 0) {
+      if (st.mode === 'cmp' || st.mode === 'cact') {
+        // chu kỳ cố định; cmp: tích luỹ áp lực để phân split cho chu kỳ kế
+        if (st.mode === 'cmp' && Math.round(t) % 5 === 0) {
           for (let k = 0; k < np; k++) st.press[k] += Math.max(0, phasePressure(st, k));
           st.pressN++;
         }
@@ -149,12 +167,18 @@
             st.g = ng;
           }
           st.press.fill(0); st.pressN = 0;
-          st.k = 0; st.part = 'g'; st.tIn = U.mod(t - pl.offset, st.C);
+          const cont = st.k === 0 && st.part === 'g';
+          st.k = 0; st.part = 'g'; st.early = false; st.noLost = cont; st.tIn = U.mod(t - pl.offset, st.C);
           return;
         }
-        if (st.part === 'g' && st.tIn >= st.g[st.k]) { st.part = 'y'; st.tIn = 0; }
+        if (st.mode !== 'cact' && st.part === 'g' && !st.early && st.tIn >= st.g[st.k]) { st.part = 'y'; st.tIn = 0; st.noLost = false; }
+        else if (st.mode === 'cact' && st.part === 'g' && !st.early && (st.tIn >= 0.5 * st.g[st.k] || st.k !== st.coord) && U.mod(t - pl.offset, st.C) >= st.endAt[st.k] && U.mod(t - pl.offset, st.C) < st.endAt[st.k] + 30) { st.part = 'y'; st.tIn = 0; st.noLost = false; } // force-off cố định
+        else if (st.mode === 'cact' && st.part === 'g' && st.k !== st.coord && st.tIn >= (ph.minG || P.minGreen) && !vehiclesNear(st, st.k)) { st.part = 'y'; st.tIn = 0; } // pha phụ hết xe → trả xanh sớm
         else if (st.part === 'y' && st.tIn >= ph.y) { st.part = 'ar'; st.tIn = 0; }
-        else if (st.part === 'ar' && st.tIn >= ph.ar) { st.k = Math.min(np - 1, st.k + 1); st.part = 'g'; st.tIn = 0; }
+        else if (st.part === 'ar' && st.tIn >= ph.ar) {
+          if (st.k >= np - 1) { st.k = 0; st.part = 'g'; st.tIn = 0; st.early = true; } // trả xanh sớm cho pha chính (pha 1) đến hết chu kỳ
+          else { st.k = st.k + 1; st.part = 'g'; st.tIn = 0; }
+        }
         return;
       }
       if (st.part === 'g') {
@@ -182,7 +206,7 @@
         if (!st) { greenNow[i] = 1; sigState[i] = 1; continue; }
         const served = links[i].phases.includes(st.k);
         if (!served) { greenNow[i] = 0; sigState[i] = 0; continue; }
-        if (st.part === 'g') { greenNow[i] = st.tIn >= P.lostStart ? 1 : 0; sigState[i] = 1; }
+        if (st.part === 'g') { greenNow[i] = (st.tIn >= P.lostStart || st.noLost || st.early) ? 1 : 0; sigState[i] = 1; }
         else if (st.part === 'y') { greenNow[i] = st.tIn < P.greenExt ? 1 : 0; sigState[i] = 2; }
         else { greenNow[i] = 0; sigState[i] = 0; }
       }

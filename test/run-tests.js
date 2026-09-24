@@ -149,6 +149,28 @@ test('Max Pressure chạy được và giữ an toàn vàng/đỏ', () => {
   assert.ok(sawYellow);
 });
 
+test('Phối hợp – xe kích hoạt: đổi pha qua vàng, pha phối hợp kết thúc đúng mốc', () => {
+  const p = D.generate({ rows: 3, cols: 3, seed: 8 });
+  const net = M.buildNet(p, 'am');
+  const sim = SIM.create(net, { scenario: 'base', mode: 'cact', dt: 1, warmup: 0 });
+  const last = sim.ctrl.map(c => c && { k: c.k, part: c.part });
+  let bad = 0;
+  for (let t = 0; t < 1200; t++) {
+    sim.step();
+    sim.ctrl.forEach((c, i) => {
+      if (!c) return;
+      if (c.k !== last[i].k && !(last[i].part === 'ar' || (last[i].part === 'g' && c.early === false && last[i].k === 0))) bad++;
+      if (last[i].part === 'g' && c.part === 'y' && c.k === c.coord) {
+        const tc = TS.util.mod(sim.t - 1 - c.plan.offset, c.C);
+        if (Math.abs(tc - c.endAt[c.coord]) > 1.01) bad++;
+      }
+      last[i] = { k: c.k, part: c.part };
+    });
+  }
+  assert.strictEqual(bad, 0);
+  assert.ok(isFinite(sim.results().delayVehH));
+});
+
 test('Louvain tách 2 cụm nối yếu', () => {
   const p = M.newProject('t'); p.bands = [{ id: 'am', label: 'am' }];
   const add = (id, lon, lat) => p.nodes.push({ id, name: id, lon, lat, plans: { am: { offset: 0, phases: [{ g: 30, y: 3, ar: 2 }, { g: 30, y: 3, ar: 2 }] } } });

@@ -72,3 +72,4 @@ Bộ kiểm thử gồm 16 bài:
 - [Hướng dẫn sử dụng](docs/HUONG_DAN_SU_DUNG.md)
 - [Định dạng dữ liệu](docs/DINH_DANG_DU_LIEU.md)
 - [Nghiên cứu AI / LLM tối ưu tín hiệu](docs/AI_TOI_UU.md)
+- [Tổng quan thuật toán thế giới & tủ tín hiệu thông minh](docs/NGHIEN_CUU_THUAT_TOAN.md)

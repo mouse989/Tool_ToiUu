@@ -98,6 +98,7 @@ Hành lang tự chọn: giữ **Ctrl** và nhấp lần lượt các nút liên 
 ### Tối ưu nâng cao: chạy thử và hiệu chỉnh lặp (AI)
 Nằm ở cuối thẻ **Tối ưu**. Nên chạy sau bước Tối ưu ở trên.
 
+0. **Cố vấn AI (LLM) mặc định TẮT**: không gọi dịch vụ ngoài. Bấm **⚙ Cấu hình AI** để bật hoặc tắt, nhập mô hình, khoá API, máy chủ trung gian nội bộ, số nút gửi đi, số đề xuất mỗi vòng. SPSA luôn dùng được mà không cần AI hay Internet.
 1. Chọn phương pháp:
    - **SPSA**: tự hiệu chỉnh offset và thời lượng xanh bằng chạy thử CTM, không cần Internet.
    - **Cố vấn AI (Claude)**: cần khoá API Anthropic và Internet.

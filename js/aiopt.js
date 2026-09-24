@@ -187,9 +187,9 @@ Chỉ trả lời bằng MỘT đối tượng JSON, không kèm văn bản khá
   };
 
   /* Gọi Claude qua SDK chính thức (@anthropic-ai/sdk, chạy trong trình duyệt). */
-  AI.askClaude = async function (apiKey, model, messages) {
+  AI.askClaude = async function (apiKey, model, messages, baseURL) {
     const Anthropic = await AI.loadSDK();
-    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+    const client = new Anthropic(Object.assign({ apiKey, dangerouslyAllowBrowser: true }, baseURL ? { baseURL } : {}));
     const req = { model: model || 'claude-opus-5', max_tokens: 16000, system: AI.LLM_SYSTEM, messages, thinking: { type: 'adaptive' }, output_config: { effort: 'high' } };
     let resp;
     if ((model || 'claude-opus-5') === 'claude-opus-5') {
@@ -202,11 +202,11 @@ Chỉ trả lời bằng MỘT đối tượng JSON, không kèm văn bản khá
 
   /* Vòng lặp: LLM đề xuất → áp từng đề xuất → CTM kiểm chứng → nhận/loại → phản hồi kết quả cho LLM. */
   AI.runLLM = async function (project, band, userOpts, progress, shouldStop, askFn) {
-    const o = Object.assign({ rounds: 3, topN: 15, model: 'claude-opus-5' }, AI.DEFAULTS, userOpts || {});
+    const o = Object.assign({ rounds: 3, topN: 15, maxActions: 8, model: 'claude-opus-5', baseURL: '' }, AI.DEFAULTS, userOpts || {});
     ensureOpt(project, band);
     const net = M.buildNet(project, band);
     const P = project.params;
-    const ask = askFn || ((msgs) => AI.askClaude(o.apiKey, o.model, msgs));
+    const ask = askFn || ((msgs) => AI.askClaude(o.apiKey, o.model, msgs, o.baseURL));
     const t0 = Date.now();
     let cur = AI.evaluate(project, band, o, net);
     const start = cur.J;
@@ -226,7 +226,7 @@ Chỉ trả lời bằng MỘT đối tượng JSON, không kèm văn bản khá
       try { plan = parseJSON(r.text); } catch (e) { log.push({ round, kind: 'err', text: 'Không đọc được JSON: ' + e.message }); messages.push({ role: 'user', content: 'Phản hồi trước không phải JSON hợp lệ. Hãy trả lại đúng một đối tượng JSON.' }); continue; }
       log.push({ round, kind: 'analysis', text: plan.analysis || '' });
       const feedback = [];
-      for (const a of (plan.actions || []).slice(0, 8)) {
+      for (const a of (plan.actions || []).slice(0, o.maxActions)) {
         if (shouldStop && shouldStop()) break;
         const n = net.nodeIdx.get(String(a.node));
         const nd = n !== undefined ? net.nodes[n] : null;
