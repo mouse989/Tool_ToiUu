@@ -903,7 +903,7 @@
       }
       S.optRunning = false; S.zoneColor = null;
       S.scenario = 'opt'; setScenarioButtons();
-      invalidate(); renderOpt(); renderRep(); renderInspector(); legend(); view.redraw(); drawDock();
+      invalidate(); renderOpt(); renderSim(); renderRep(); renderInspector(); legend(); view.redraw(); drawDock();
       toast('Tối ưu hoàn tất. Đang hiển thị phương án Đề xuất.');
     } catch (e) {
       S.optRunning = false; renderOpt();
@@ -1020,6 +1020,27 @@
     mp: 'Max Pressure không chu kỳ toàn mạng',
     act: 'Xe kích hoạt toàn mạng',
   };
+  const SCN_DESC = {
+    base: ['Giản đồ HIỆN TRẠNG (thẻ phải → "Giản đồ pha hiện trạng")', 'Mỗi tủ chạy theo chế độ khai báo ở ô "Điều khiển" của nút (mặc định: cố định)'],
+    opt: ['Giản đồ ĐỀ XUẤT do bộ tối ưu tính (C vùng, split, offset sóng xanh)', 'Mọi tủ chạy cố định theo giản đồ'],
+    'opt-rec': ['Giản đồ ĐỀ XUẤT', 'Cố định, riêng các vùng được khuyến nghị "thích ứng" chạy Max Pressure (vùng phối hợp: giữ C và offset, split đổi theo áp lực; nút độc lập: đổi pha tự do)'],
+    'opt-mp': ['Giản đồ ĐỀ XUẤT (lấy C, offset, thứ tự pha)', 'Mọi tủ: Max Pressure chu kỳ cố định — split mỗi chu kỳ theo áp lực hàng chờ, ±4 s/chu kỳ'],
+    mp: ['Giản đồ ĐỀ XUẤT nếu có, không thì HIỆN TRẠNG (chỉ lấy vàng, đỏ toàn phần, xanh min/max)', 'Mọi tủ: Max Pressure không chu kỳ — mỗi 3 s chọn pha có áp lực lớn nhất'],
+    act: ['Giản đồ ĐỀ XUẤT nếu có, không thì HIỆN TRẠNG (lấy vàng, đỏ, xanh min/max)', 'Mọi tủ: xe kích hoạt — kéo dài xanh khi còn hàng chờ, tối đa xanh max'],
+  };
+  function scnInfo(key) {
+    const d = SCN_DESC[key];
+    let modes = '';
+    try {
+      const cfg = simConfigFor(key);
+      const cnt = {};
+      getNet().nodes.forEach((nd, i) => { if (!nd.signalized) return; const m = (cfg.modes && cfg.modes[i]) || cfg.mode || nd.control || 'fixed'; cnt[m] = (cnt[m] || 0) + 1; });
+      modes = Object.entries(cnt).map(([m, c]) => `${c} tủ ${SIM.MODES[m]}`).join(' · ');
+    } catch (e) { modes = '<span class="bad">' + esc(e.message) + '</span>'; }
+    return `<div class="rec" style="cursor:default"><div class="t">Dữ liệu kịch bản sử dụng</div>
+      <b>Nhu cầu:</b> lưu lượng q & vận tốc v từng nhánh của khung giờ <b>${esc(bandLabel(S.band))}</b> (thẻ Dữ liệu), tỷ lệ rẽ ước lượng Furness, × hệ số nhu cầu.<br>
+      <b>Đèn:</b> ${esc(d[0])}.<br><b>Điều khiển:</b> ${esc(d[1])}.<br><span class="note">${modes}</span></div>`;
+  }
   const simCfg = { dt: 2, warmup: 600, duration: 1800, demandMul: 1, noiseCV: 0, profile: 'flat' };
 
   function simConfigFor(key) {
@@ -1045,6 +1066,7 @@
     $('pane-sim').innerHTML = `
       <h3>Kịch bản mô phỏng</h3>
       <select class="sel" id="sScn" style="width:100%">${Object.entries(SCN).map(([key, v]) => `<option value="${key}" ${key === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+      <div id="sInfo">${scnInfo(k)}</div>
       <div class="grid2" style="margin-top:6px">
         <label class="field">Bước thời gian Δt (s)<select id="sDt"><option value="1" ${simCfg.dt === 1 ? 'selected' : ''}>1 (chi tiết)</option><option value="2" ${simCfg.dt === 2 ? 'selected' : ''}>2 (nhanh)</option></select></label>
         <label class="field">Khởi động (phút)<input type="number" id="sWarm" value="${simCfg.warmup / 60}"></label>
@@ -1063,7 +1085,7 @@
       <div id="abProg" hidden><div class="progress"><i id="abBar"></i></div></div>
       <div id="abOut">${S.ab ? abTable(S.ab) : ''}</div>
       <p class="note">Mô hình CTM (Daganzo): hàng chờ có chiều dài vật lý, sóng dừng/xả lan truyền, nhánh đầy chặn nút thượng lưu (tràn ngược, khoá nút). Max Pressure: Varaiya (2013); chu kỳ cố định giữ offset phối hợp, split thay đổi ±4 s/chu kỳ.</p>`;
-    $('sScn').onchange = (e) => { S.simScenario = e.target.value; if (S.sim) { stopSim(); startSim(); } };
+    $('sScn').onchange = (e) => { S.simScenario = e.target.value; $('sInfo').innerHTML = scnInfo(S.simScenario); if (S.sim) { stopSim(); startSim(); } };
     $('sDt').onchange = (e) => { simCfg.dt = +e.target.value; };
     $('sWarm').onchange = (e) => { simCfg.warmup = U.num(e.target.value, 10) * 60; };
     $('sDur').onchange = (e) => { simCfg.duration = U.num(e.target.value, 30) * 60; };

@@ -275,16 +275,25 @@
       pl.offset = Math.round(U.mod(pl.offset, M.cycleOf(pl)));
       net.nodes[n].opt[band] = pl;
     }
-    const evOpt = PR.evaluateScenario(net, 'opt');
+    let evOpt = PR.evaluateScenario(net, 'opt');
+    let optLinks = net.links.map((_, i) => evOpt.ev.linkResult(i));
+    const aggZ = (z, arr) => { const ls = [...new Set(z.nodes.flatMap(n => net.inL[n]))]; let q = 0, d = 0, h = 0, pi = 0, sp = 0; for (const i of ls) { const l = net.links[i]; q += l.q; d += arr[i].d * l.q; h += arr[i].h * l.q; pi += arr[i].PI; if (arr[i].occ >= P.spillThreshold) sp++; } return { q, delay: q ? d / q : 0, stops: q ? h / q : 0, PI: pi, spill: sp }; };
+    // không đề xuất phương án kém hơn hiện trạng: vùng nào PI đề xuất > PI hiện trạng thì giữ giản đồ hiện trạng
+    let reverted = 0;
+    for (const z of zonesOut) {
+      if (aggZ(z, optLinks).PI > aggZ(z, baseLinks).PI * 1.001) {
+        for (const n of z.nodes) { net.nodes[n].opt[band] = U.deepClone(net.nodes[n].plans[band]); }
+        z.keptBase = true; z.nHalf = 0; z.C = Math.max(...z.nodes.map(n => M.cycleOf(net.nodes[n].plans[band]))); reverted++;
+      }
+    }
+    if (reverted) { evOpt = PR.evaluateScenario(net, 'opt'); optLinks = net.links.map((_, i) => evOpt.ev.linkResult(i)); }
     const optTot = evOpt.tot;
-    const optLinks = net.links.map((_, i) => evOpt.ev.linkResult(i));
     const hcmOpt = SG.analyzeNetwork(net, 'opt');
 
     // chỉ tiêu theo vùng
     for (const z of zonesOut) {
       const ls = [...new Set(z.nodes.flatMap(n => net.inL[n]))];
-      const agg = (arr) => { let q = 0, d = 0, h = 0, pi = 0, sp = 0; for (const i of ls) { const l = net.links[i]; q += l.q; d += arr[i].d * l.q; h += arr[i].h * l.q; pi += arr[i].PI; if (arr[i].occ >= P.spillThreshold) sp++; } return { q, delay: q ? d / q : 0, stops: q ? h / q : 0, PI: pi, spill: sp }; };
-      z.base = agg(baseLinks); z.opt = agg(optLinks);
+      z.base = aggZ(z, baseLinks); z.opt = aggZ(z, optLinks);
       const xs = ls.map(i => optLinks[i].x);
       z.xmax = xs.length ? Math.max(...xs) : 0;
       // biến động nhu cầu giữa các khung giờ
@@ -357,6 +366,7 @@
       let strategy, text;
       const dImp = z.base && z.base.delay > 0 ? (z.base.delay - z.opt.delay) / z.base.delay : 0;
       const adaptOk = z.adaptiveGain !== undefined ? z.adaptiveGain > 0.05 : null;
+      const keep = z.keptBase ? ' Giản đồ cố định: GIỮ HIỆN TRẠNG (phương án tính lại không tốt hơn trên mô hình).' : '';
       if (z.isolated) {
         strategy = adaptOk === false ? 'isolated-fixed' : 'isolated-adaptive';
         text = adaptOk === false
@@ -372,7 +382,7 @@
         strategy = 'coord-transyt';
         text = `Vùng phối hợp C = ${z.C}s, offset tối ưu TRANSYT (không có trục đủ điều kiện sóng xanh).`;
       }
-      recs.push({ kind: 'zone', zone: z.id, strategy, text, gain: dImp, nodes: z.nodes.length });
+      recs.push({ kind: 'zone', zone: z.id, strategy, text: text + keep, gain: dImp, nodes: z.nodes.length });
     }
     for (const c of corrs) {
       if (c.gws.cls === 'none') {
