@@ -30,6 +30,16 @@
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
   };
 
+  /* Phương vị theo hình học tuyến: đoạn cuối (hướng xe tiến vào nút) hoặc đoạn đầu (hướng xe rời nút), lấy trên ~dist m. */
+  U.bearingAlong = function (geom, atEnd, dist) {
+    dist = dist || 40;
+    const pts = atEnd ? geom.slice().reverse() : geom;
+    let acc = 0, k = 1;
+    for (; k < pts.length - 1; k++) { acc += U.haversine(pts[k - 1], pts[k]); if (acc >= dist) break; }
+    const a = pts[0], b = pts[Math.min(k, pts.length - 1)];
+    return atEnd ? U.bearing(b, a) : U.bearing(a, b);
+  };
+
   U.angleDiff = function (a, b) {
     const d = Math.abs(((a - b) % 360 + 360) % 360);
     return d > 180 ? 360 - d : d;

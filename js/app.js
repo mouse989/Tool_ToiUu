@@ -10,7 +10,7 @@
   const S = {
     project: null, band: null, scenario: 'base',
     net: null, netKey: '', ana: null, geo: null,
-    sel: null, chain: [], tool: 'sel', pendingLinkFrom: null,
+    sel: null, chain: [], poly: [], polyDone: false, tool: 'sel', pendingLinkFrom: null,
     colorBy: 'vc', tsd: null, dock: 'tsd', dockMin: false,
     sim: null, simGeo: null, playing: false, simSpeed: 20, simScenario: 'opt-rec', rec: null,
     ab: null, seriesMetric: 'bal', optRunning: false, zoneColor: null, hover: null,
@@ -191,6 +191,36 @@
       }
       for (const [key, p] of groups) { const [col, w] = key.split('|'); ctx.strokeStyle = col; ctx.lineWidth = +w; ctx.stroke(p); }
     } else drawSimLinks(ctx, lw, off, inView);
+    // vùng đa giác lấy OSM
+    if (S.poly.length) {
+      ctx.save();
+      ctx.strokeStyle = css('--s2'); ctx.fillStyle = css('--s2'); ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      S.poly.forEach((q, k) => { const p = view.lonlatToScreen(q[0], q[1]); k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); });
+      if (S.polyDone || S.poly.length > 2) ctx.closePath();
+      ctx.globalAlpha = 0.08; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke(); ctx.setLineDash([]);
+      for (const q of S.poly) { const p = view.lonlatToScreen(q[0], q[1]); ctx.beginPath(); ctx.arc(p[0], p[1], 4, 0, 7); ctx.fill(); }
+      ctx.restore();
+    }
+    // nhánh vào của nút có đèn đang chọn: tô màu theo pha phục vụ
+    if (S.sel && S.sel.type === 'node' && !simOn) {
+      const nd = S.project.nodes[S.sel.n];
+      if (nd && nd.signalized) {
+        const pc = ['--s1', '--s2', '--s3', '--s4', '--s5', '--s7'].map(css);
+        ctx.font = '600 11px ' + css('--font');
+        for (const i of net.inL[S.sel.n]) {
+          const g = geo.links[i], pts = linkScreenPts(g, g.twoWay ? off : 0);
+          const k = net.links[i].phases[0] || 0;
+          ctx.strokeStyle = pc[k % pc.length]; ctx.lineWidth = lw + 4; ctx.globalAlpha = 0.85;
+          ctx.beginPath(); pts.forEach((q, j) => j ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke(); ctx.globalAlpha = 1;
+          const m = pts[Math.max(0, pts.length - 2)], e = pts[pts.length - 1];
+          const lx = e[0] + (m[0] - e[0]) * 0.35, ly = e[1] + (m[1] - e[1]) * 0.35;
+          const label = 'P' + net.links[i].phases.map(x => x + 1).join('+');
+          ctx.fillStyle = css('--surface'); ctx.fillRect(lx - 11, ly - 8, 24, 16);
+          ctx.fillStyle = pc[k % pc.length]; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, lx + 1, ly);
+        }
+      }
+    }
     // chuỗi hành lang tự chọn
     if (S.chain.length) {
       ctx.strokeStyle = css('--s7'); ctx.lineWidth = lw + 4; ctx.globalAlpha = 0.5; ctx.beginPath();
@@ -355,6 +385,17 @@
   view.onClick = function (px, py, e) {
     if (!S.project) return;
     const hit = hitTest(px, py);
+    if (S.tool === 'poly') {
+      const [lon, lat] = U.unproject(...view.toMerc(px, py));
+      if (S.polyDone) { S.poly = []; S.polyDone = false; }
+      S.poly.push([lon, lat]); updatePolyInfo(); view.redraw();
+      return;
+    }
+    if (S.tool === 'sig') {
+      if (!hit || hit.type !== 'node') { toast('Nhấp vào một nút giao để gắn / gỡ đèn'); return; }
+      toggleSignal(hit.n);
+      return;
+    }
     if (S.tool === 'addN') {
       const [mx, my] = view.toMerc(px, py);
       const [lon, lat] = U.unproject(mx, my);
@@ -447,6 +488,89 @@
     const net = getNet();
     const idx = net.links.findIndex(l => l.ref.u === na.id && l.ref.v === nb.id);
     if (idx >= 0) select({ type: 'link', i: idx });
+  }
+
+  /* ── Gắn đèn & nhận biết nhánh ↔ pha ── */
+  function describeGroups(desc) {
+    return desc.map(g => `Pha ${g.phase}: ${g.approaches.map(a => `${a.dir}${a.road ? ' (' + a.road + ')' : ''}`).join(', ')}`).join(' · ');
+  }
+  function toggleSignal(n) {
+    const node = S.project.nodes[n];
+    node.signalized = !node.signalized;
+    if (node.signalized) {
+      const desc = TS.osm.setupSignal(S.project, node);
+      toast(`Đã gắn đèn tại ${node.id}. ${describeGroups(desc) || 'Chưa có nhánh vào.'}`);
+    } else toast(`Đã gỡ đèn tại ${node.id} (nút không đèn: xe qua theo năng lực nhánh).`);
+    invalidate(); select({ type: 'node', n });
+  }
+  /* ── Vùng đa giác OSM ── */
+  function updatePolyInfo() {
+    const el = $('polyInfo');
+    if (S.tool !== 'poly' && !S.poly.length) { el.innerHTML = ''; return; }
+    if (S.poly.length < 3) { el.innerHTML = `Vẽ vùng: nhấp các đỉnh trên bản đồ (${S.poly.length} đỉnh)${S.poly.length ? ' <button class="btn sm ghost" id="polyClr">Xoá</button>' : ''}`; }
+    else {
+      const a = TS.osm.polyAreaKm2(S.poly);
+      el.innerHTML = `Vùng: <b>${S.poly.length}</b> đỉnh · <b>${a.toFixed(2)}</b> km² <button class="btn sm accent" id="polyGo">Tải mạng OSM…</button> <button class="btn sm ghost" id="polyUndo">↶ Bớt đỉnh</button> <button class="btn sm ghost" id="polyClr">Xoá</button>`;
+      $('polyGo').onclick = () => { S.polyDone = true; view.redraw(); osmDialog(null); };
+      $('polyUndo').onclick = () => { S.poly.pop(); S.polyDone = false; updatePolyInfo(); view.redraw(); };
+    }
+    if ($('polyClr')) $('polyClr').onclick = () => { S.poly = []; S.polyDone = false; updatePolyInfo(); view.redraw(); };
+  }
+  const osmOpts = { classes: TS.osm.DEFAULT_CLASSES.slice(), R: 30, keepMidSignals: false, defaultFlows: true, mode: 'new' };
+  function osmDialog(fileData) {
+    const src = fileData ? 'file OSM đã chọn' : `vùng vẽ ${S.poly.length} đỉnh (${TS.osm.polyAreaKm2(S.poly).toFixed(2)} km²)`;
+    const cls = Object.entries(TS.osm.CLASSES).map(([k, c]) => `<label class="chk"><input type="checkbox" data-cls="${k}" ${osmOpts.classes.includes(k) ? 'checked' : ''}> ${c.label} <span class="note" style="margin:0">(${k})</span></label>`).join('');
+    modal('Dựng mạng lưới từ OpenStreetMap', `
+      <p>Nguồn: <b>${esc(src)}</b>${fileData ? (S.poly.length >= 3 ? ' — chỉ lấy phần trong vùng vẽ' : ' — lấy toàn bộ file') : ' — tải qua Overpass API (cần Internet)'}.</p>
+      <div class="grid2" style="gap:14px"><div><h3 style="font-size:12px;color:var(--muted)">CẤP ĐƯỜNG ĐƯA VÀO MÔ HÌNH</h3>${cls}
+        <p class="note">Nên chọn từ tertiary trở lên cho mô hình điều khiển tín hiệu; đường dân cư làm mạng rất dày.</p></div>
+      <div><h3 style="font-size:12px;color:var(--muted)">XỬ LÝ HÌNH HỌC</h3>
+        <label class="field">Bán kính gộp nút giao R (m)<input type="number" id="oR" value="${osmOpts.R}"></label>
+        <p class="note">Gộp các điểm giao cách nhau &lt; R (đường đôi, dải phân cách, nút phức hợp) thành một nút. TP.HCM: 25–40 m.</p>
+        <label class="chk"><input type="checkbox" id="oMid" ${osmOpts.keepMidSignals ? 'checked' : ''}> Giữ đèn giữa đoạn (đèn qua đường bộ hành) làm nút riêng</label>
+        <label class="chk"><input type="checkbox" id="oFlow" ${osmOpts.defaultFlows ? 'checked' : ''}> Điền lưu lượng mặc định theo cấp đường (đánh dấu "ước lượng")</label>
+        <h3 style="font-size:12px;color:var(--muted)">KẾT QUẢ</h3>
+        <label class="chk"><input type="radio" name="oMode" value="new" ${osmOpts.mode === 'new' ? 'checked' : ''}> Tạo dự án mới</label>
+        <label class="chk"><input type="radio" name="oMode" value="add" ${osmOpts.mode === 'add' ? 'checked' : ''}> Thêm vào dự án hiện tại</label></div></div>
+      <p class="note">Đèn tín hiệu lấy từ thẻ OSM <code>highway=traffic_signals</code> (gán về nút giao gần nhất trong ~${Math.max(40, osmOpts.R + 15)} m). Nhánh vào nút có đèn được tự nhóm theo trục → pha 1 (trục chính), pha 2, pha 3. Sau khi dựng, dùng công cụ <b>🚦 Gắn đèn</b> để gắn / gỡ đèn và kiểm tra nhánh ↔ pha.</p>
+      <div id="osmMsg" class="note"></div>`,
+    [{ label: 'Huỷ' }, { label: 'Tải & dựng mạng', cls: 'accent', onClick: () => { runOsm(fileData); return false; } }]);
+  }
+  async function runOsm(fileData) {
+    const body = $('modalBody');
+    osmOpts.classes = [...body.querySelectorAll('[data-cls]')].filter(x => x.checked).map(x => x.dataset.cls);
+    osmOpts.R = U.num($('oR').value, 30); osmOpts.keepMidSignals = $('oMid').checked; osmOpts.defaultFlows = $('oFlow').checked;
+    osmOpts.mode = (body.querySelector('input[name="oMode"]:checked') || {}).value || 'new';
+    const msg = (t, err) => { const m = $('osmMsg'); if (m) { m.innerHTML = t; m.className = err ? 'note bad' : 'note'; } };
+    if (!osmOpts.classes.length) { msg('Chọn ít nhất một cấp đường', true); return; }
+    try {
+      let data = fileData;
+      if (!data) {
+        if (TS.osm.polyAreaKm2(S.poly) > 60 && !confirm('Vùng lớn hơn 60 km² — tải có thể chậm. Tiếp tục?')) return;
+        data = await TS.osm.fetchOverpass(TS.osm.buildQuery(S.poly, osmOpts.classes), (t) => msg(t));
+      }
+      msg('Đang dựng mạng lưới…'); await U.sleep(20);
+      const r = TS.osm.buildProject(data, Object.assign({}, osmOpts, { poly: S.poly.length >= 3 ? S.poly : null, name: 'Mạng OSM ' + new Date().toLocaleDateString('vi-VN') }));
+      if (!r.project.nodes.length) { msg('Không có tuyến đường nào trong vùng với cấp đường đã chọn.', true); return; }
+      if (osmOpts.mode === 'add' && S.project) mergeProject(r.project); else loadProject(r.project, true);
+      S.poly = []; S.polyDone = false; setTool('sel'); updatePolyInfo();
+      const s = r.stats;
+      modal('Kết quả dựng mạng OSM', `<table class="cmp"><tbody>
+        <tr><td>Tuyến OSM (way) đọc được</td><td>${U.fmt(s.ways)}</td></tr>
+        <tr><td>Điểm giao thô → nút giao sau gộp & rút gọn</td><td>${U.fmt(s.junctions)} → <b>${U.fmt(s.clusters)}</b></td></tr>
+        <tr><td>Nhánh có hướng (liên kết)</td><td><b>${U.fmt(s.links)}</b></td></tr>
+        <tr><td>Đèn OSM → nút có đèn</td><td>${s.sigRaw} → <b>${s.signals}</b>${s.sigLost ? ` (${s.sigLost} đèn không gần nút nào)` : ''}</td></tr></tbody></table>
+        <p class="note">Tiếp theo: kiểm tra đèn bằng công cụ <b>🚦 Gắn đèn</b> (nhấp nút đã có đèn để xem nhánh ↔ pha, tô màu trên bản đồ), nhập lưu lượng / vận tốc (thẻ Dữ liệu hoặc CSV), giản đồ pha hiện trạng, rồi chạy Tối ưu.${osmOpts.defaultFlows ? ' Lưu lượng hiện là giá trị mặc định theo cấp đường.' : ''}</p>`);
+    } catch (e) { console.error(e); msg(esc(e.message), true); }
+  }
+  function mergeProject(q) {
+    const p = S.project, ids = new Set(p.nodes.map(n => n.id));
+    let k = 0; const ren = new Map();
+    for (const n of q.nodes) { let id; do { id = 'O' + String(++k).padStart(4, '0'); } while (ids.has(id)); ids.add(id); ren.set(n.id, id); n.id = id; }
+    for (const l of q.links) { l.u = ren.get(l.u); l.v = ren.get(l.v); delete l.id; }
+    for (const n of q.nodes) { for (const b of p.bands) { if (!n.plans[b.id]) n.plans[b.id] = U.deepClone(n.plans[q.bands[0].id] || M.defaultPlan(p.params, 2)); } p.nodes.push(n); }
+    for (const l of q.links) { for (const b of p.bands) if (!l.data[b.id]) l.data[b.id] = U.deepClone(l.data[q.bands[0].id] || {}); p.links.push(l); }
+    M.normalizeProject(p); invalidate(true); renderAll(); fitAll();
   }
 
   function updateChainInfo() {
@@ -616,7 +740,7 @@
         <label class="field">Khu vực xung quanh<select data-nf="landuse" title="Quyết định tỷ lệ xe kết thúc/bắt đầu chuyến tại khu vực nút">${Object.entries(M.LANDUSE).map(([k, v]) => `<option value="${k}" ${node.landuse === k ? 'selected' : ''}>${v.label} (${Math.round((v.r ?? S.project.params.exchangeRate) * 100)}%)</option>`).join('')}</select></label>
         <label class="field">Có đèn<select data-nf="signalized"><option value="1" ${node.signalized ? 'selected' : ''}>Có</option><option value="0" ${!node.signalized ? 'selected' : ''}>Không</option></select></label></div>
         <h3>Giản đồ pha hiện trạng · ${esc(bandLabel(S.band))}</h3>${planEditor(node, 'base')}
-        <div class="row"><button class="btn sm" data-act="webster">Webster cho nút</button><button class="btn sm" data-act="ite">Vàng/đỏ theo ITE</button><button class="btn sm" data-act="copyband">Chép sang mọi khung giờ</button></div>
+        <div class="row"><button class="btn sm" data-act="webster">Webster cho nút</button><button class="btn sm" data-act="ite">Vàng/đỏ theo ITE</button><button class="btn sm" data-act="copyband">Chép sang mọi khung giờ</button><button class="btn sm" data-act="axis" title="Nhóm nhánh vào theo trục đường → pha; tạo lại giản đồ mặc định">Gán pha theo trục</button></div>
         <h3>Giản đồ pha đề xuất</h3>${planEditor(node, 'opt')}
         ${node.opt[S.band] ? '<div class="row"><button class="btn sm" data-act="applyopt">Áp dụng đề xuất → hiện trạng</button></div>' : ''}
         <h3>Nhánh tiếp cận · ${esc(bandLabel(S.band))}</h3>${appr}
@@ -706,7 +830,10 @@
           for (const l of S.project.links) { if (l.u === node.id) l.u = nid; if (l.v === node.id) l.v = nid; }
           for (const c of S.project.corridors) c.nodes = c.nodes.map(x => x === node.id ? nid : x);
           node.id = nid;
-        } else if (f === 'signalized') node.signalized = inp.value === '1';
+        } else if (f === 'signalized') {
+          node.signalized = inp.value === '1';
+          if (node.signalized) toast(describeGroups(TS.osm.setupSignal(S.project, node, true)) || 'Đã gắn đèn');
+        }
         else if (f === 'width') node.width = U.num(inp.value, 20);
         else node[f] = inp.value;
         invalidate(true); renderInspector(); view.redraw();
@@ -725,6 +852,7 @@
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
       const act = b.dataset.act, net = getNet();
       if (act === 'mkopt') node.opt[S.band] = U.deepClone(node.plans[S.band]);
+      if (act === 'axis') { if (!confirm('Tạo lại giản đồ pha mặc định (mọi khung giờ) và gán pha nhánh vào theo trục?')) return; const desc = TS.osm.setupSignal(S.project, node); toast(describeGroups(desc)); }
       if (act === 'webster') { const r = SG.optimizeNode(net, n, node.plans[S.band]); node.opt[S.band] = Object.assign(r.plan, { offset: node.plans[S.band].offset }); toast(`Webster: C = ${r.C}s (Y = ${r.Y.toFixed(2)}) → ghi vào giản đồ đề xuất`); }
       if (act === 'ite') { SG.applyITE(net, n, node.plans[S.band]); toast('Đã tính vàng/đỏ toàn phần theo ITE cho hiện trạng'); }
       if (act === 'copyband') { for (const bb of S.project.bands) if (bb.id !== S.band) node.plans[bb.id] = U.deepClone(node.plans[S.band]); toast('Đã chép giản đồ sang mọi khung giờ'); }
@@ -1418,6 +1546,13 @@
   bindMenu('mImport', (act) => {
     if (act === 'csv') importCSV();
     else if (act === 'gz') openProject();
+    else if (act === 'osmpoly') setTool('poly');
+    else if (act === 'osmfile') (async () => {
+      const files = await pickFile('.osm,.xml,.json');
+      if (!files.length) return;
+      try { const data = TS.osm.parseFile(await U.readFile(files[0])); osmDialog(data); }
+      catch (e) { toast('Không đọc được file OSM: ' + e.message, true); }
+    })();
     else exportAct(act);
   });
   bindMenu('mExport', exportAct);
@@ -1449,12 +1584,16 @@
   };
   function setTool(t) {
     S.tool = t; S.pendingLinkFrom = null;
-    const map = { sel: 'tSel', addN: 'tAddN', addL: 'tAddL', move: 'tMove' };
+    const map = { sel: 'tSel', addN: 'tAddN', addL: 'tAddL', move: 'tMove', sig: 'tSig', poly: 'tPoly' };
     for (const [k, id] of Object.entries(map)) $(id).setAttribute('aria-pressed', k === t);
-    $('mapwrap').classList.toggle('edit-add', t === 'addN' || t === 'addL');
+    $('mapwrap').classList.toggle('edit-add', t === 'addN' || t === 'addL' || t === 'poly' || t === 'sig');
+    updatePolyInfo();
+    if (t === 'poly') toast('Nhấp các đỉnh của vùng cần lấy dữ liệu OSM, sau đó bấm "Tải mạng OSM…"');
+    if (t === 'sig') toast('Nhấp vào nút giao để gắn / gỡ đèn. Nhánh vào được tô màu theo pha phục vụ.');
     view.redraw();
   }
   $('tSel').onclick = () => setTool('sel'); $('tAddN').onclick = () => setTool('addN'); $('tAddL').onclick = () => setTool('addL'); $('tMove').onclick = () => setTool('move');
+  $('tSig').onclick = () => setTool('sig'); $('tPoly').onclick = () => setTool('poly');
   document.querySelectorAll('.left .tabs [data-tab]').forEach(b => b.onclick = () => {
     document.querySelectorAll('.left .tabs [data-tab]').forEach(x => x.setAttribute('aria-selected', x === b));
     for (const k of ['data', 'opt', 'sim', 'rep']) $('pane-' + k).hidden = k !== b.dataset.tab;
@@ -1511,5 +1650,5 @@
   loadProject(initial || TS.demo.generate(), true);
   if (!initial) toast('Đang dùng mạng mẫu 500 nút giả lập. Vào Tối ưu → "Tối ưu khung giờ này" để chạy thử.');
   applyTheme();
-  TS.app = S; // phục vụ gỡ lỗi
+  TS.app = S; TS.__view = view; // phục vụ gỡ lỗi / kiểm thử
 })(window.TS);

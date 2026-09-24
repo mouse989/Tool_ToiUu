@@ -40,6 +40,32 @@ Lần đầu mở, phần mềm nạp **mạng mẫu 500 nút giả lập** đ�
 
 Đã có dữ liệu MVP1 thì chỉ cần **Mở…** file `index.html` cũ của Green Zone Player.
 
+## 3b. Dựng mạng lưới từ OpenStreetMap (OSM) theo vùng vẽ
+1. Bấm **⬠ Vùng OSM** trên thanh công cụ bản đồ, hoặc **Nhập ▾ → Lấy mạng đường OSM theo vùng vẽ**.
+2. Nhấp lần lượt các đỉnh của vùng cần lấy dữ liệu. Thanh công cụ hiện số đỉnh và diện tích; dùng **↶ Bớt đỉnh** hoặc **Xoá** để sửa.
+3. Bấm **Tải mạng OSM…** rồi chọn:
+   - **Cấp đường**: mặc định từ tertiary trở lên. Đường dân cư làm mạng rất dày, chỉ nên chọn khi cần.
+   - **Bán kính gộp nút R**: mặc định 30 m, gộp đường đôi, dải phân cách, nút phức hợp thành một nút giao.
+   - Giữ hay không giữ đèn giữa đoạn.
+   - Điền lưu lượng mặc định theo cấp đường.
+   - Tạo dự án mới hoặc thêm vào dự án hiện tại.
+4. Phần mềm tải dữ liệu qua **Overpass API** (cần Internet; lần lượt thử overpass-api.de, overpass.kumi.systems, overpass.private.coffee) và dựng mạng:
+   - chỉ lấy đường **nằm trong vùng**; điểm cắt biên trở thành nút **cửa ngõ**;
+   - tách tuyến tại điểm giao, **gộp điểm giao gần nhau** thành một nút, **rút gọn** các điểm gấp khúc hoặc đổi tên đường (nút bậc 2 không có đèn);
+   - chiều đi theo `oneway` (kể cả `-1` và vòng xoay); **số làn** từ `lanes`, `lanes:forward/backward`, nếu thiếu thì từ `width` hoặc mặc định theo cấp đường; vận tốc từ `maxspeed` hoặc theo cấp đường; chiều dài tính theo hình học thực;
+   - **đèn tín hiệu** lấy từ thẻ `highway=traffic_signals`. Ở TP.HCM thẻ này thường đặt tại vạch dừng, lệch tâm nút 10–30 m, nên được gán về nút giao gần nhất.
+5. Không có Internet thì tải dữ liệu OSM bằng công cụ khác (JOSM, trang Overpass Turbo → Export) rồi dùng **Nhập ▾ → Nhập file OSM (.osm / .json)**. Nếu đang có vùng vẽ, phần mềm chỉ lấy phần nằm trong vùng.
+
+### Gắn đèn và nhận biết nhánh ↔ pha
+- Bấm **🚦 Gắn đèn** rồi nhấp vào nút giao để **gắn hoặc gỡ đèn**. Có thể đổi ô "Có đèn" ở cột phải cho kết quả tương tự.
+- Khi gắn đèn, phần mềm tự nhận biết các **nhánh vào nút** và nhóm chúng theo **trục đường**:
+  - hướng tiếp cận được tính theo đoạn cuối của tuyến, nên đúng cả với lưới đường xiên hoặc đường cong;
+  - trục chính (nhiều làn, cấp cao) là **pha 1**, trục cắt ngang là **pha 2**; nút 5–6 nhánh có **pha 3**;
+  - giản đồ mặc định được tạo cho mọi khung giờ.
+- Chọn một nút có đèn: các nhánh vào được **tô màu theo pha** và gắn nhãn P1, P2… ngay trên bản đồ. Bảng "Nhánh tiếp cận" ở cột phải cho sửa pha của từng nhánh, ví dụ `1;3` cho rẽ trái có pha riêng.
+- Nút "**Gán pha theo trục**" trong cột phải làm lại việc nhóm pha cho nút đang chọn.
+- Nút **không có đèn** được mô phỏng như nút ưu tiên: xe qua theo năng lực nhánh.
+
 ## 4. Chạy tối ưu
 Thẻ **Tối ưu**:
 1. Kiểm tra thiết lập: chu kỳ tối thiểu/tối đa, phạt dừng K, kích thước vùng, ngưỡng GWS, lưu lượng tối thiểu để xét sóng xanh.

@@ -22,7 +22,7 @@
       for (const j of net.outL[a.v]) {
         const b = links[j];
         if (b.v === a.u) continue;
-        const d = U.angleDiff(a.brg, b.brg);
+        const d = U.angleDiff(a.brg, b.brgStart);
         const same = ra && normRoad(b.road) === ra;
         const lim = same ? o.maxTurn : (ra ? -1 : 18);
         if (d <= lim && d < bd) { bd = d; best = j; }
@@ -38,7 +38,7 @@
       // nhiều tiền nhiệm: giữ cái thẳng nhất
       const j = succ[i];
       let bi = -1, bd = 1e9;
-      for (let k = 0; k < links.length; k++) if (succ[k] === j) { const d = U.angleDiff(links[k].brg, links[j].brg); if (d < bd) { bd = d; bi = k; } }
+      for (let k = 0; k < links.length; k++) if (succ[k] === j) { const d = U.angleDiff(links[k].brg, links[j].brgStart); if (d < bd) { bd = d; bi = k; } }
       for (let k = 0; k < links.length; k++) if (succ[k] === j && k !== bi) succ[k] = -1;
     }
     for (let i = 0; i < links.length; i++) if (succ[i] >= 0) hasPred[succ[i]] = 1;

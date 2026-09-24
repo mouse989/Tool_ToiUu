@@ -18,6 +18,7 @@ Lần đầu mở có sẵn **mạng mẫu 500 nút (giả lập)**: thẻ **T�
 ## Chức năng
 | Nhóm | Nội dung |
 |---|---|
+| Mạng lưới OSM | Vẽ vùng đa giác → tải OpenStreetMap (Overpass) hoặc nhập file .osm/.json → tự dựng nút giao (gộp đường đôi), nhánh có hướng, số làn, vận tốc, đèn tín hiệu; công cụ Gắn đèn tự gán nhánh vào ↔ pha theo trục |
 | Dữ liệu | Nhập CSV nút / giản đồ pha / nhánh-lưu lượng / hướng tiếp cận (có quy đổi PCU từ số đếm phân loại); nhập thẳng file Green Zone Player; vẽ, sửa nút và nhánh trên bản đồ; bảng sửa hàng loạt; kiểm tra lỗi; bù số liệu thiếu; tính vàng/đỏ ITE; nhiều khung giờ |
 | Phân tích nút | Độ bão hoà v/c, trễ và LOS theo HCM, chu kỳ Webster, chu kỳ tối thiểu khả thi |
 | Tối ưu | Split cân bằng bão hoà → phân vùng Louvain → quét chu kỳ vùng theo PI (TRANSYT) có ½ chu kỳ → chấm điểm khả thi sóng xanh GWS → offset MAXBAND và vận tốc khuyến nghị → leo đồi offset/split TRANSYT → kiểm chứng CTM → khuyến nghị phương án |
@@ -37,6 +38,7 @@ js/maxband.js         tối ưu offset hành lang (mục tiêu MAXBAND)
 js/zoning.js          nhận diện hành lang, GWS, phân vùng Louvain
 js/ctm.js             mô phỏng CTM + điều khiển cố định/actuated/Max Pressure
 js/optimizer.js       pipeline tối ưu toàn mạng + bộ luật khuyến nghị
+js/osm.js             dựng mạng lưới từ OpenStreetMap (Overpass / file .osm), gán đèn & pha theo trục
 js/io.js              nhập/xuất JSON, CSV, Green Zone Player, phiếu cài đặt tủ
 js/demo.js            sinh mạng mẫu giả lập
 js/mapview.js         bản đồ trượt nhẹ (không phụ thuộc thư viện)

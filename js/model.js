@@ -198,7 +198,7 @@
       L.push({
         idx, ref: l, id: l.id, u: ui, v: vi, road: l.road || '',
         len, lanes: l.lanes, S, q, vkmh: vk, vms: vk / 3.6, T: len / (vk / 3.6),
-        phases: l.phases, geom, brg: U.bearing([nu.lon, nu.lat], [nv.lon, nv.lat]),
+        phases: l.phases, geom, brg: U.bearingAlong(geom, true), brgStart: U.bearingAlong(geom, false),
         src: d.src || 'measured',
       });
       outL[ui].push(idx); inL[vi].push(idx);
@@ -233,7 +233,7 @@
         for (let b = 0; b < outs.length; b++) {
           const lj = links[outs[b]];
           if (lj.v === li.u && outs.length > 1) continue; // quay đầu
-          T[a * Cc + b] = U.angleDiff(li.brg, lj.brg) < 30 ? o.wThrough : o.wTurn;
+          T[a * Cc + b] = U.angleDiff(li.brg, lj.brgStart) < 30 ? o.wThrough : o.wTurn;
         }
         T[a * Cc + outs.length] = 0.15;
       }
@@ -372,7 +372,7 @@
       if (onlyMissing && l.phases && l.phases.length && l._phaseSet) continue;
       const nu = nodeById.get(l.u), nv = nodeById.get(l.v);
       if (!nu || !nv) continue;
-      const brg = U.bearing([nu.lon, nu.lat], [nv.lon, nv.lat]);
+      const brg = l.geom && l.geom.length >= 2 ? U.bearingAlong(l.geom, true) : U.bearing([nu.lon, nu.lat], [nv.lon, nv.lat]);
       const nPh = nv.plans[b0] ? nv.plans[b0].phases.length : 2;
       const ns = U.angleDiff(brg, 0) < 45 || U.angleDiff(brg, 180) < 45;
       if (nPh <= 2) l.phases = [ns ? 0 : Math.min(1, nPh - 1)];

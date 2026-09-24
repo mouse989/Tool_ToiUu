@@ -198,6 +198,27 @@ test('Nhập Green Zone Player: trích DATA từ index.html', () => {
   assert.strictEqual(p.links[0].data.am_x.q, 1800); // 500 × 0.001 pcu/s × 3600
 });
 
+test('OSM: gộp nút đường đôi, rút gọn nút bậc 2, gán đèn lệch tâm, pha theo trục', () => {
+  const fx = require('./osm-fixture.js')();
+  const { project: p, stats } = TS.osm.buildProject(fx.data, { poly: fx.poly, R: 30 });
+  assert.strictEqual(p.nodes.length, 5, 'số nút giao bậc ≥ 3');
+  assert.strictEqual(stats.signals, 2);
+  assert.ok(!p.links.some(l => l.road === 'Ngoài vùng'), 'cắt theo đa giác');
+  assert.ok(!p.links.some(l => l.road === 'Hẻm'), 'lọc cấp đường');
+  const mid = p.nodes.find(n => n.name.includes('Đại lộ A') && n.signalized);
+  const ins = p.links.filter(l => l.v === mid.id);
+  assert.strictEqual(ins.length, 4);
+  const avenue = ins.filter(l => l.road === 'Đại lộ A');
+  assert.strictEqual(avenue.length, 2);
+  assert.ok(avenue.every(l => l.phases[0] === 0) && ins.filter(l => l.road !== 'Đại lộ A').every(l => l.phases[0] === 1), 'trục chính pha 1, trục phụ pha 2');
+  assert.ok(avenue.every(l => l.lanes === 3), 'số làn một chiều của đường đôi');
+  // phố một chiều oneway=-1 chỉ có một chiều
+  assert.strictEqual(p.links.filter(l => l.road === 'Phố C').length, 2);
+  const net = M.buildNet(p, 'am');
+  const r = SIM.runBatch(net, { scenario: 'base', dt: 2, warmup: 300, duration: 600 }).res;
+  assert.ok(r.exits > 0 && isFinite(r.delayVehH));
+});
+
 test('Pipeline tối ưu 150 nút: đề xuất tốt hơn hiện trạng', async () => {
   const p = D.generate({ rows: 10, cols: 15, seed: 7 });
   const r = await OPT.run(p, 'am', { verifyCTM: true, ctmDuration: 900, ctmWarmup: 300 });

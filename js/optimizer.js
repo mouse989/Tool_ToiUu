@@ -33,7 +33,7 @@
       const pu = planOf(u), pv = planOf(l.v);
       // pha tại u cấp dòng cho l: pha của nhánh vào u thẳng hàng nhất với l
       let feed = null, bd = 1e9;
-      for (const i of net.inL[u]) { const d = U.angleDiff(net.links[i].brg, l.brg); if (d < bd) { bd = d; feed = net.links[i].phases; } }
+      for (const i of net.inL[u]) { const d = U.angleDiff(net.links[i].brg, l.brgStart); if (d < bd) { bd = d; feed = net.links[i].phases; } }
       const depart = pu.offset + firstStart(pu, feed || [0]);
       pv.offset = Math.round(U.mod(depart + l.T - firstStart(pv, l.phases), M.cycleOf(pv)));
     };
