@@ -1298,6 +1298,8 @@
   }
   function bindMenu(btnId, handler) {
     const btn = $(btnId), list = btn.nextElementSibling;
+    list.dataset.for = btnId;
+    document.body.appendChild(list); // đưa menu ra ngoài thanh trên để không bị khung nào che/cắt
     btn.onclick = (e) => { e.stopPropagation(); document.querySelectorAll('.menu-list').forEach(m => { if (m !== list) m.hidden = true; }); list.hidden = !list.hidden;
       if (!list.hidden) { const r = btn.getBoundingClientRect(); list.style.top = (r.bottom + 4) + 'px'; list.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; list.style.left = 'auto'; } };
     list.querySelectorAll('button').forEach(b => b.onclick = () => { list.hidden = true; handler(b.dataset.act); });

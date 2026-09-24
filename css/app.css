@@ -41,7 +41,7 @@ button{cursor:pointer}
 :focus-visible{outline:2px solid var(--s1); outline-offset:1px}
 
 /* ── thanh trên ── */
-.top{display:flex; align-items:center; gap:10px; padding:6px 12px; border-bottom:1px solid var(--line); background:var(--surface); height:48px; flex-wrap:nowrap; overflow-x:auto}
+.top{display:flex; align-items:center; gap:10px; padding:6px 12px; border-bottom:1px solid var(--line); background:var(--surface); height:48px; flex-wrap:nowrap; overflow:visible; position:relative; z-index:20; min-width:0}
 .brand{font-weight:700; letter-spacing:-.01em; white-space:nowrap; font-size:15px}
 .brand small{display:block; font-weight:400; color:var(--muted); font-size:11px; letter-spacing:0}
 .pname{min-width:140px; max-width:280px; border:1px solid transparent; background:none; padding:3px 6px; border-radius:var(--r); font-weight:600}
@@ -61,7 +61,7 @@ button{cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--ink); color:var(--surface)}
 select.sel,input.inp{background:var(--ground); border:1px solid var(--line); border-radius:var(--r); padding:3px 6px; font-size:12.5px; min-width:0}
 .menu{position:relative; display:inline-block}
-.menu-list{position:fixed; background:var(--surface); border:1px solid var(--line); border-radius:var(--R); box-shadow:0 10px 28px rgba(0,0,0,.18); z-index:1000; max-height:calc(100vh - 70px); overflow-y:auto; min-width:250px; padding:4px}
+.menu-list{position:fixed !important; background:var(--surface); border:1px solid var(--line); border-radius:var(--R); box-shadow:0 10px 28px rgba(0,0,0,.18); z-index:1000; max-height:calc(100vh - 70px); overflow-y:auto; min-width:250px; padding:4px}
 .menu-list button{display:block; width:100%; text-align:left; background:none; border:0; padding:6px 10px; border-radius:var(--r); font-size:12.5px}
 .menu-list button:hover{background:var(--ground)}
 .menu-list hr{border:0; border-top:1px solid var(--hair); margin:4px 0}
