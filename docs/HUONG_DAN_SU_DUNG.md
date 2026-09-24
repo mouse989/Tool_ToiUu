@@ -36,6 +36,11 @@ Lần đầu mở, phần mềm nạp **mạng mẫu 500 nút giả lập** đ�
    - chế độ điều khiển của tủ.
 
    Sửa hàng loạt tại **Bảng nút & giản đồ pha** và **Bảng nhánh & lưu lượng**.
+   Bảng nút có 3 chế độ xem:
+   - **Hiện trạng**: giản đồ đang cài ngoài tủ, sửa trực tiếp được.
+   - **Đề xuất**: giản đồ do bộ tối ưu tính, có cột Vùng, ký hiệu ½ = nút chạy nửa chu kỳ vùng; sửa trực tiếp được.
+   - **So sánh**: mỗi ô hiện `hiện trạng → đề xuất`; thời gian xanh tăng tô xanh ▲, giảm tô đỏ ▼. Chỉ xem.
+   Ô lọc nhận mã nút, tên hoặc mã vùng (ví dụ `V07`) để xem riêng một vùng phối hợp.
 5. Vẽ mới trên bản đồ: **+ Nút** rồi nhấp lên bản đồ; **+ Nhánh** rồi nhấp nút đầu và nút cuối (giữ Shift để tạo nhánh 1 chiều); **Di chuyển** để kéo nút.
 
 Đã có dữ liệu MVP1 thì chỉ cần **Mở…** file `index.html` cũ của Green Zone Player.

@@ -1031,7 +1031,7 @@
       <h3>Khung giờ</h3>
       <div id="bandList">${p.bands.map((b, i) => `<div class="row"><input class="inp mono" value="${esc(b.id)}" style="width:70px" disabled><input class="inp" data-bl="${i}" value="${esc(b.label)}" style="flex:1"></div>`).join('')}</div>
       <div class="row"><button class="btn sm" id="bandAdd">+ Khung giờ (sao chép khung hiện tại)</button></div>`;
-    $('dNodes').onclick = nodesTable; $('dLinks').onclick = linksTable;
+    $('dNodes').onclick = () => nodesTable(); $('dLinks').onclick = linksTable;
     $('dValidate').onclick = validateDlg;
     $('dImpute').onclick = () => { const r = M.imputeMissing(p); invalidate(); renderData(); view.redraw(); toast(`Đã bù ${r.nq} giá trị lưu lượng, ${r.nv} giá trị vận tốc`); };
     $('dITE').onclick = () => { for (const b of p.bands) { const net = M.buildNet(p, b.id); for (let n = 0; n < net.N; n++) if (net.nodes[n].signalized) SG.applyITE(net, n, net.nodes[n].plans[b.id]); } invalidate(); toast('Đã tính vàng/đỏ toàn phần ITE cho hiện trạng mọi khung giờ'); renderInspector(); };
@@ -1072,35 +1072,82 @@
   }
   const pf = (k, label) => `<label class="field">${label}<input type="number" step="any" data-pf="${k}" value="${S.project.params[k]}"></label>`;
 
-  function nodesTable() {
+  function nodesTable(mode, flt) {
     const p = S.project, b = S.band;
-    const maxPh = Math.max(2, ...p.nodes.map(n => (n.plans[b] || { phases: [] }).phases.length));
-    let h = `<p class="note">Khung giờ: <b>${esc(bandLabel(b))}</b> · giản đồ HIỆN TRẠNG. Sửa trực tiếp trong ô; chu kỳ tự tính = Σ(xanh + vàng + đỏ). Lọc: <input class="inp" id="fltN" placeholder="mã / tên"></p>
-      <div class="tw" style="max-height:60vh"><table class="dtable"><thead><tr><th>Mã</th><th>Tên</th><th>Lat</th><th>Lon</th><th>Đèn</th><th>C</th><th>Offset</th>`;
-    for (let k = 1; k <= maxPh; k++) h += `<th>Xanh ${k}</th><th>Vàng ${k}</th><th>Đỏ ${k}</th>`;
+    const hasOpt = p.nodes.some(n => n.opt && n.opt[b]);
+    mode = mode || (S.scenario === 'opt' && hasOpt ? 'opt' : 'base');
+    if (mode !== 'base' && !hasOpt) mode = 'base';
+    const planOf = (n, w) => w === 'opt' ? (n.opt && n.opt[b]) : n.plans[b];
+    const r = p.results && p.results[b];
+    const zOf = r ? new Map(r.nodeIds.map((id, i) => [id, r.zoneOf[i]])) : null;
+    const zTxt = (n) => { if (!zOf || !zOf.has(n.id)) return ''; const zi = zOf.get(n.id); return zi >= 0 ? 'V' + String(zi + 1).padStart(2, '0') : ''; };
+    const maxPh = Math.max(2, ...p.nodes.map(n => Math.max((n.plans[b] || { phases: [] }).phases.length, (planOf(n, 'opt') || { phases: [] }).phases.length)));
+    const segBtn = (m, label, tip) => `<button data-nmode="${m}" aria-pressed="${mode === m}" ${m !== 'base' && !hasOpt ? 'disabled title="Chưa có giản đồ đề xuất – chạy thẻ Tối ưu trước"' : `title="${tip}"`}>${label}</button>`;
+    const desc = {
+      base: 'giản đồ <b>HIỆN TRẠNG</b> (đang cài ngoài tủ). Sửa trực tiếp trong ô; chu kỳ tự tính = Σ(xanh + vàng + đỏ).',
+      opt: 'giản đồ <b>ĐỀ XUẤT</b> do bộ tối ưu tính. Sửa trực tiếp được; nút chưa có đề xuất để trống. ½ = chạy nửa chu kỳ vùng.',
+      cmp: '<b>SO SÁNH</b> hiện trạng → đề xuất (chỉ xem). <span style="color:var(--ok-ink)">▲ xanh tăng</span> · <span style="color:var(--bad-ink)">▼ xanh giảm</span>.'
+    }[mode];
+    let h = `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><span class="seg" role="group" aria-label="Giản đồ hiển thị">${segBtn('base', 'Hiện trạng', 'Giản đồ đang cài đặt ngoài hiện trường')}${segBtn('opt', 'Đề xuất', 'Giản đồ do bộ tối ưu đề xuất')}${segBtn('cmp', 'So sánh', 'Hiện trạng → đề xuất trên cùng một dòng')}</span>
+      <span class="note" style="margin:0">Khung giờ: <b>${esc(bandLabel(b))}</b> · ${desc}</span><span class="sp"></span>
+      <label class="row" style="margin:0;gap:4px">Lọc <input class="inp" id="fltN" placeholder="mã / tên / vùng" value="${esc(flt || '')}"></label></div>`;
+    if (!hasOpt) h += '<p class="note" style="margin:0 0 6px">Chưa có giản đồ đề xuất cho khung giờ này – vào thẻ <b>Tối ưu</b> → <i>Tối ưu khung giờ này</i>.</p>';
+    h += `<div class="tw" style="max-height:60vh"><table class="dtable"><thead><tr><th>Mã</th><th>Tên</th>`;
+    if (mode === 'base') h += '<th>Lat</th><th>Lon</th>';
+    else h += '<th>Vùng</th>';
+    h += '<th>Đèn</th><th>C</th><th>Offset</th>';
+    for (let k = 1; k <= maxPh; k++) h += mode === 'cmp' ? `<th>Xanh ${k}</th>` : `<th>Xanh ${k}</th><th>Vàng ${k}</th><th>Đỏ ${k}</th>`;
+    if (mode === 'cmp') h += '<th>Vàng/Đỏ</th>';
     h += '</tr></thead><tbody>';
+    const arrow = (a, o, neutral) => {
+      if (a === undefined || a === null || a === '') return o === undefined ? '' : `<b>${o}</b>`;
+      if (o === undefined || o === null) return `${a}`;
+      if (a === o) return `${o}`;
+      const up = o > a;
+      return `<span style="color:var(--muted)">${a}</span> → <b${neutral ? '' : ` style="color:var(${up ? '--ok-ink' : '--bad-ink'})"`}>${o} ${up ? '▲' : '▼'}</b>`;
+    };
     p.nodes.forEach((n, i) => {
-      const pl = n.plans[b];
-      h += `<tr data-row="${i}" data-key="${esc((n.id + ' ' + n.name).toLowerCase())}"><td class="mono">${esc(n.id)}</td><td><input class="w" data-i="${i}" data-f="name" value="${esc(n.name)}"></td><td><input data-i="${i}" data-f="lat" value="${n.lat}"></td><td><input data-i="${i}" data-f="lon" value="${n.lon}"></td><td>${n.signalized ? '●' : '○'}</td><td class="mono" data-c="${i}">${pl ? M.cycleOf(pl) : ''}</td><td><input data-i="${i}" data-f="offset" value="${pl ? pl.offset : ''}"></td>`;
-      for (let k = 0; k < maxPh; k++) { const ph = pl && pl.phases[k]; for (const f of ['g', 'y', 'ar']) h += `<td><input style="width:44px" data-i="${i}" data-k="${k}" data-f="${f}" value="${ph ? ph[f] : ''}"></td>`; }
+      const pa = n.plans[b], po = planOf(n, 'opt');
+      const key = (n.id + ' ' + n.name + ' ' + zTxt(n)).toLowerCase();
+      h += `<tr data-row="${i}" data-key="${esc(key)}"><td class="mono">${esc(n.id)}</td>`;
+      if (mode === 'cmp') {
+        h += `<td>${esc(n.name)}</td><td class="mono">${zTxt(n)}</td><td>${n.signalized ? '●' : '○'}</td>`;
+        const cA = pa ? M.cycleOf(pa) : '', cO = po ? M.cycleOf(po) : undefined;
+        h += `<td class="mono">${po ? arrow(cA, cO, true) : cA}${po && po.half ? ' ½' : ''}</td><td class="mono">${po ? arrow(pa ? pa.offset : '', po.offset, true) : (pa ? pa.offset : '')}</td>`;
+        for (let k = 0; k < maxPh; k++) { const a = pa && pa.phases[k], o = po && po.phases[k]; h += `<td class="mono">${po ? arrow(a ? a.g : '', o ? o.g : undefined) : (a ? a.g : '')}</td>`; }
+        const yr = (pl) => pl ? pl.phases.map(x => x.y + '/' + x.ar).join(' ') : '';
+        h += `<td class="mono">${po && yr(po) !== yr(pa) ? `<span style="color:var(--muted)">${yr(pa)}</span> → <b>${yr(po)}</b>` : yr(pa)}</td>`;
+      } else {
+        const pl = mode === 'opt' ? po : pa;
+        if (mode === 'base') h += `<td><input class="w" data-i="${i}" data-f="name" value="${esc(n.name)}"></td><td><input data-i="${i}" data-f="lat" value="${n.lat}"></td><td><input data-i="${i}" data-f="lon" value="${n.lon}"></td>`;
+        else h += `<td>${esc(n.name)}</td><td class="mono">${zTxt(n)}</td>`;
+        h += `<td>${n.signalized ? '●' : '○'}</td><td class="mono" data-c="${i}">${pl ? M.cycleOf(pl) + (pl.half ? ' ½' : '') : ''}</td>`;
+        const dis = pl ? '' : ' disabled';
+        h += `<td><input data-i="${i}" data-f="offset" value="${pl ? pl.offset : ''}"${dis}></td>`;
+        for (let k = 0; k < maxPh; k++) { const ph = pl && pl.phases[k]; for (const f of ['g', 'y', 'ar']) h += `<td><input style="width:44px" data-i="${i}" data-k="${k}" data-f="${f}" value="${ph ? ph[f] : ''}"${dis}></td>`; }
+      }
       h += '</tr>';
     });
     h += '</tbody></table></div>';
     modal('Bảng nút giao & giản đồ pha', h, [{ label: 'Xuất CSV', onClick: () => { U.download('nut_giao.csv', IO.nodesCSV(p)); U.download('gian_do_pha.csv', IO.plansCSV(p, ['hien_trang', 'toi_uu'])); return false; } }, { label: 'Đóng', cls: 'primary' }]);
     const body = $('modalBody');
+    body.querySelectorAll('[data-nmode]').forEach(bt => bt.onclick = () => nodesTable(bt.dataset.nmode, $('fltN').value));
     body.querySelectorAll('input[data-i]').forEach(inp => inp.onchange = () => {
       const n = p.nodes[+inp.dataset.i], f = inp.dataset.f;
       if (f === 'name') n.name = inp.value;
       else if (f === 'lat' || f === 'lon') { n[f] = U.num(inp.value, n[f]); S.geo = null; }
       else {
-        const pl = n.plans[b];
+        const pl = planOf(n, mode);
+        if (!pl) return;
         if (f === 'offset') pl.offset = U.num(inp.value, 0);
         else { const k = +inp.dataset.k; if (!pl.phases[k]) { if (inp.value === '') return; while (pl.phases.length <= k) pl.phases.push({ g: p.params.minGreen, y: p.params.yellow, ar: p.params.allRed }); } pl.phases[k][f] = U.num(inp.value, 0); }
-        body.querySelector(`[data-c="${inp.dataset.i}"]`).textContent = M.cycleOf(pl);
+        body.querySelector(`[data-c="${inp.dataset.i}"]`).textContent = M.cycleOf(pl) + (pl.half ? ' ½' : '');
       }
       invalidate(f === 'lat' || f === 'lon'); view.redraw();
     });
-    $('fltN').oninput = (e) => { const q = e.target.value.toLowerCase(); body.querySelectorAll('tr[data-row]').forEach(tr => { tr.hidden = q && !tr.dataset.key.includes(q); }); };
+    const applyFlt = () => { const q = $('fltN').value.toLowerCase(); body.querySelectorAll('tr[data-row]').forEach(tr => { tr.hidden = q && !tr.dataset.key.includes(q); }); };
+    $('fltN').oninput = applyFlt;
+    if (flt) applyFlt();
   }
 
   function linksTable() {
